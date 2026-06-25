@@ -1,7 +1,7 @@
-import Image from "next/image";
+
 import React from "react";
 import MainLayout from "../components/layout/MainLayout";
-          width={100}
+          
 function KpiCard({ title, value, delta }: { title: string; value: string; delta?: string }) {
   return (
     <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg p-4 shadow-sm">
