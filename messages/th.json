@@ -1,0 +1,31 @@
+{
+"navigation": {
+"dashboard": "แดชบอร์ด",
+"property": "โครงการ",
+"residents": "ลูกบ้าน",
+"rental": "ห้องเช่า",
+"workOrders": "งานซ่อม",
+"visitors": "ผู้มาติดต่อ",
+"security": "รักษาความปลอดภัย",
+"reports": "รายงาน",
+"settings": "ตั้งค่า"
+},
+
+"dashboard": {
+"overview": "ภาพรวม",
+"recentActivity": "กิจกรรมล่าสุด",
+"activeResidents": "ลูกบ้านปัจจุบัน",
+"openWorkOrders": "งานซ่อมค้าง",
+"vacancies": "ห้องว่าง",
+"monthlyRevenue": "รายได้ประจำเดือน"
+},
+
+"common": {
+"save": "บันทึก",
+"cancel": "ยกเลิก",
+"edit": "แก้ไข",
+"delete": "ลบ",
+"search": "ค้นหา",
+"language": "ภาษา"
+}
+}

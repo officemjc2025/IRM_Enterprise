@@ -1,0 +1,31 @@
+{
+"navigation": {
+"dashboard": "Dashboard",
+"property": "Property",
+"residents": "Residents",
+"rental": "Rental",
+"workOrders": "Work Orders",
+"visitors": "Visitors",
+"security": "Security",
+"reports": "Reports",
+"settings": "Settings"
+},
+
+"dashboard": {
+"overview": "Overview",
+"recentActivity": "Recent Activity",
+"activeResidents": "Active Residents",
+"openWorkOrders": "Open Work Orders",
+"vacancies": "Vacancies",
+"monthlyRevenue": "Monthly Revenue"
+},
+
+"common": {
+"save": "Save",
+"cancel": "Cancel",
+"edit": "Edit",
+"delete": "Delete",
+"search": "Search",
+"language": "Language"
+}
+}
