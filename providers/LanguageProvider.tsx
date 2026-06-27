@@ -32,11 +32,13 @@ export function LanguageProvider({
   const [language, setLanguageState] = useState<Language>("th");
 
   useEffect(() => {
-    const saved = localStorage.getItem("language") as Language | null;
+    queueMicrotask(() => {
+      const saved = localStorage.getItem("language") as Language | null;
 
-    if (saved === "th" || saved === "en") {
-      setLanguageState(saved);
-    }
+      if (saved === "th" || saved === "en") {
+        setLanguageState(saved);
+      }
+    });
   }, []);
 
   const setLanguage = (lang: Language) => {

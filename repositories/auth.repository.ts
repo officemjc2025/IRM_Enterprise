@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 export async function signIn(
   email: string,
@@ -28,4 +29,10 @@ export async function getSession() {
   const supabase = createClient();
 
   return supabase.auth.getSession();
+}
+
+export function onAuthStateChange(callback: (event: AuthChangeEvent, session: Session | null) => void) {
+  const supabase = createClient();
+  
+  return supabase.auth.onAuthStateChange(callback);
 }

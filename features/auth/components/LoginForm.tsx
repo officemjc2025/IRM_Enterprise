@@ -2,18 +2,39 @@
 
 import React, { useState } from "react";
 import { useLanguage } from "../../../providers/LanguageProvider";
+import { useRouter } from "next/navigation";
+import { authService } from "@/services/auth.service";
 
 export default function LoginForm() {
   const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Authentication logic will be implemented in the next sprint
-    console.log("Login submitted", { email, password, rememberMe });
-  };
+  const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (loading) return;
+
+  setLoading(true);
+
+  try {
+    const { error } = await authService.signIn(email, password);
+
+    if (error) {
+      console.error(error.message);
+      return;
+    }
+
+    router.replace("/");
+  } catch (err) {
+    console.error("Unexpected login error:", err);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="w-full max-w-md">
@@ -61,12 +82,12 @@ export default function LoginForm() {
                 >
                   {t.auth?.password || "Password"}
                 </label>
-                <a
-                  href="#"
-                  className="text-sm font-medium text-[#D4AF37] hover:text-[#b8952b] transition-colors"
-                >
+                <button
+    type="button"
+  className="text-sm font-medium text-[#D4AF37] hover:text-[#b8952b] transition-colors"
+>
                   {t.auth?.forgotPassword || "Forgot Password?"}
-                </a>
+                </button>
               </div>
               <input
                 id="password"
@@ -96,10 +117,14 @@ export default function LoginForm() {
             </div>
 
             <button
-              type="submit"
-              className="w-full py-3 px-4 bg-[#D4AF37] hover:bg-[#b8952b] text-white text-sm font-semibold rounded-xl shadow-lg shadow-[#D4AF37]/20 transition-all active:scale-[0.98]"
+    type="submit"
+    disabled={loading}
+    aria-busy={loading}
+              className="w-full py-3 px-4 bg-[#D4AF37] hover:bg-[#b8952b] disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-xl shadow-lg shadow-[#D4AF37]/20 transition-all active:scale-[0.98]"
             >
-              {t.auth?.signIn || "Sign In"}
+             {loading
+    ? "Signing In..."
+    : (t.auth?.signIn || "Sign In")}
             </button>
           </form>
         </div>

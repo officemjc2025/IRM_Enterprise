@@ -72,4 +72,5 @@ export const IconSettings = ({ className = "", size = 16 }: IconProps) => (
   </svg>
 );
 
-export default {};
+const LucideLike = {};
+export default LucideLike;

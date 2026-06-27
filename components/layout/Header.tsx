@@ -15,22 +15,23 @@ export default function Header({
 
   return (
     <header
-      className={
-        "sticky top-0 z-30 w-full border-b border-slate-200 bg-white " +
-        className
-      }
-    >
+  className={
+    "sticky top-0 z-30 w-full border-b border-[#0F172A] bg-[#0F172A] text-white shadow-md " +
+    className
+  }
+>
+    
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
         {/* Left */}
         <div className="flex items-center gap-4">
           <button
-            className="rounded-lg p-2 hover:bg-slate-100"
+            className="rounded-lg p-2 text-white hover:bg-white/10 transition-colors"
             aria-label="Open sidebar"
           >
             ☰
           </button>
 
-          <h1 className="text-xl font-bold text-[#1E3A8A]">
+          <h1 className="text-xl font-bold text-white">
             {t.navigation.dashboard}
           </h1>
         </div>
