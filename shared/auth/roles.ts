@@ -16,6 +16,11 @@ export const Roles = {
   TENANT: "tenant",
 
   RESIDENT: "resident",
+  PROPERTY_MANAGER: "property_manager",
+
+OFFICE_STAFF: "office_staff",
+
+ACCOUNTING: "accounting",
 } as const;
 
 export type Role =
