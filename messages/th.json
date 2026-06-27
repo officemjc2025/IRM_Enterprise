@@ -27,5 +27,16 @@
 "delete": "ลบ",
 "search": "ค้นหา",
 "language": "ภาษา"
+},
+
+"auth": {
+"login": "เข้าสู่ระบบ",
+"email": "อีเมล",
+"password": "รหัสผ่าน",
+"rememberMe": "จดจำการเข้าระบบ",
+"forgotPassword": "ลืมรหัสผ่าน?",
+"signIn": "เข้าสู่ระบบ",
+"welcomeBack": "ยินดีต้อนรับกลับ",
+"loginToAccount": "กรุณาเข้าสู่ระบบบัญชีของคุณ"
 }
 }

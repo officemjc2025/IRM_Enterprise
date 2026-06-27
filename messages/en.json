@@ -27,5 +27,16 @@
 "delete": "Delete",
 "search": "Search",
 "language": "Language"
+},
+
+"auth": {
+"login": "Login",
+"email": "Email",
+"password": "Password",
+"rememberMe": "Remember Me",
+"forgotPassword": "Forgot Password?",
+"signIn": "Sign In",
+"welcomeBack": "Welcome Back",
+"loginToAccount": "Please log in to your account"
 }
 }
