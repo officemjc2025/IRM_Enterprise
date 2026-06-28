@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { authService } from "@/services/auth.service";
+import { useProfile } from "@/hooks/useProfile";
 
 export default function UserMenu() {
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const { profile } = useProfile();
 
   const handleLogout = async () => {
     try {
@@ -19,6 +21,10 @@ export default function UserMenu() {
     }
   };
 
+  const displayName = profile?.full_name || profile?.display_name || "User";
+  const roleName = profile?.role || "Resident";
+  const initials = displayName.substring(0, 2).toUpperCase();
+
   return (
     <div className="relative">
       {/* User Button */}
@@ -27,15 +33,15 @@ export default function UserMenu() {
         className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700"
       >
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#1E3A8A] text-sm font-semibold text-white">
-          MA
+          {initials}
         </div>
 
         <div className="hidden text-left lg:block">
           <p className="text-sm font-semibold text-slate-800 dark:text-white">
-            Metro Admin
+            {displayName}
           </p>
           <p className="text-xs text-slate-500">
-            Administrator
+            {roleName}
           </p>
         </div>
 
@@ -63,15 +69,15 @@ export default function UserMenu() {
           {/* Header */}
           <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-700">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#1E3A8A] text-base font-bold text-white">
-              MA
+              {initials}
             </div>
 
             <div>
               <p className="text-sm font-semibold text-slate-900 dark:text-white">
-                Metro Admin
+                {displayName}
               </p>
               <p className="text-xs text-slate-500">
-                Administrator
+                {roleName}
               </p>
             </div>
           </div>
