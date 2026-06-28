@@ -31,8 +31,14 @@ export async function getSession() {
   return supabase.auth.getSession();
 }
 
+export async function refreshSession() {
+  const supabase = createClient();
+
+  return supabase.auth.refreshSession();
+}
+
 export function onAuthStateChange(callback: (event: AuthChangeEvent, session: Session | null) => void) {
   const supabase = createClient();
-  
+
   return supabase.auth.onAuthStateChange(callback);
 }

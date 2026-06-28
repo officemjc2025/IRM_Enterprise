@@ -2,8 +2,8 @@
 
 import { ReactNode, createContext, useEffect, useState } from "react";
 import { User, Session } from "@supabase/supabase-js";
-import { authService } from "@/services/auth.service";
-import { profileService } from "@/services/profile.service";
+import { authService } from "@/services/auth/auth.service";
+import { profileService } from "@/services/profile/profile.service";
 import { Profile } from "@/types/profile";
 
 type AuthContextType = {
@@ -27,33 +27,61 @@ export default function AuthProvider({ children }: Props) {
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    let isMounted = true;
+    let isInitialized = false;
+
     const initializeAuth = async () => {
-      setLoading(true);
       try {
-        const { data: { session } } = await authService.getSession();
-        setSession(session);
-        setUser(session?.user ?? null);
+        const { data: { session: currentSession } } = await authService.getSession();
+        if (!isMounted || isInitialized) return;
+
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
         
-        if (session?.user) {
-          const userProfile = await profileService.getProfile(session.user.id);
-          setProfile(userProfile);
+        if (currentSession?.user) {
+          const userProfile = await profileService.getProfile(currentSession.user.id);
+          if (isMounted) {
+            setProfile(userProfile);
+          }
+        } else {
+          setProfile(null);
         }
       } catch (error) {
         console.error("Failed to load session:", error);
       } finally {
-        setLoading(false);
+        if (isMounted && !isInitialized) {
+          setLoading(false);
+        }
       }
     };
 
     initializeAuth();
 
-    const { data: { subscription } } = authService.onAuthStateChange(async (_event, currentSession) => {
+    const { data: { subscription } } = authService.onAuthStateChange(async (event, currentSession) => {
+      if (!isMounted) return;
+
+      isInitialized = true;
+
+      if (event === "SIGNED_OUT") {
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
       
       if (currentSession?.user) {
-        const userProfile = await profileService.getProfile(currentSession.user.id);
-        setProfile(userProfile);
+        try {
+          const userProfile = await profileService.getProfile(currentSession.user.id);
+          if (isMounted) {
+            setProfile(userProfile);
+          }
+        } catch (error) {
+          console.error("Failed to load user profile on auth change:", error);
+        }
       } else {
         setProfile(null);
       }
@@ -62,6 +90,7 @@ export default function AuthProvider({ children }: Props) {
     });
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
     };
   }, []);

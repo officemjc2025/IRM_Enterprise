@@ -1,4 +1,4 @@
-import * as authRepository from "@/repositories/auth.repository";
+import * as authRepository from "@/repositories/auth/auth.repository";
 
 export const authService = {
   signIn: authRepository.signIn,
@@ -6,4 +6,5 @@ export const authService = {
   getUser: authRepository.getUser,
   getSession: authRepository.getSession,
   onAuthStateChange: authRepository.onAuthStateChange,
+  refreshSession: authRepository.refreshSession,
 };

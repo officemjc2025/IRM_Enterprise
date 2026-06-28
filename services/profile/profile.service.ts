@@ -1,4 +1,4 @@
-import * as profileRepository from "@/repositories/profile.repository";
+import * as profileRepository from "@/repositories/profile/profile.repository";
 
 export const profileService = {
   getProfile: profileRepository.getProfile,

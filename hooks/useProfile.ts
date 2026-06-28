@@ -2,7 +2,7 @@
 
 import { useContext, useState } from "react";
 import { AuthContext } from "@/providers/AuthProvider";
-import { profileService } from "@/services/profile.service";
+import { profileService } from "@/services/profile/profile.service";
 import { Profile } from "@/types/profile";
 
 export function useProfile() {

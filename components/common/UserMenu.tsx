@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { authService } from "@/services/auth.service";
+import { authService } from "@/services/auth/auth.service";
 import { useProfile } from "@/hooks/useProfile";
 
 export default function UserMenu() {
