@@ -1,31 +1,31 @@
-import { Roles } from "./roles";
+import { ROLES } from "./roles";
 
 export const Permissions = {
 
   ManageProperty: [
-    Roles.SUPER_ADMIN,
-    Roles.ADMIN,
+    ROLES.SUPER_ADMIN,
+    ROLES.PROPERTY_ADMIN,
   ],
 
   ManageResident: [
-    Roles.SUPER_ADMIN,
-    Roles.ADMIN,
+    ROLES.SUPER_ADMIN,
+    ROLES.PROPERTY_ADMIN,
   ],
 
   SecurityGate: [
-    Roles.SECURITY,
-    Roles.ADMIN,
+    ROLES.SECURITY,
+    ROLES.PROPERTY_ADMIN,
   ],
 
   WorkOrder: [
-    Roles.TECHNICIAN,
-    Roles.ADMIN,
+    ROLES.TECHNICIAN,
+    ROLES.PROPERTY_ADMIN,
   ],
 
   ResidentPortal: [
-    Roles.OWNER,
-    Roles.CO_OWNER,
-    Roles.TENANT,
-    Roles.RESIDENT,
+    ROLES.OWNER,
+    ROLES.CO_OWNER,
+    ROLES.TENANT,
+    ROLES.RESIDENT,
   ],
 };
