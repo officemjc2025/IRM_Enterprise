@@ -1,133 +1,51 @@
-# IRM Enterprise
+# Chapter 00 — Project Vision
 
-## Chapter 00 — Project Vision
+**Version:** 1.0.0
 
-Version: 1.0
+**Status:** Active
 
-Status: Draft
-
-Author: IRM Enterprise Architecture Team
+**Document Owner:** IRM Enterprise Architecture Team
 
 ---
 
-# 1. Vision
+# Vision
 
-IRM Enterprise is an Enterprise Property Management Platform designed for condominium, apartment, hotel, mixed-use property, and rental management.
+IRM Enterprise is a next-generation Property Management Platform designed to manage every aspect of residential, rental, security, maintenance, finance, and resident services within a single integrated ecosystem.
 
-The objective is to create a modern platform capable of managing all operational processes within a property organization using a single integrated system.
+The platform aims to eliminate fragmented software by providing one unified enterprise solution for property organizations.
 
-The platform is designed to be modular, scalable, secure, and cloud-native.
-
----
-
-# 2. Mission
-
-The mission of IRM Enterprise is to replace fragmented operational tools with a unified enterprise platform that provides:
-
-* Property Management
-* Resident Management
-* Rental Management
-* Visitor Management
-* Security Operations
-* Maintenance & Work Orders
-* Accounting Integration
-* Business Intelligence
-* Mobile First Experience
+IRM Enterprise is designed to support condominiums, apartments, mixed-use developments, hotels, resorts, and multi-property organizations without requiring architectural redesign.
 
 ---
 
-# 3. Long-Term Goal
+# Mission
 
-IRM Enterprise aims to become the central operating platform for property management organizations.
+Our mission is to build an enterprise-grade platform that connects every department within a property organization through a single source of truth.
 
-The system must support:
-
-* Single Property
-* Multiple Properties
-* Property Groups
-* Franchise Operations
-* Enterprise Organizations
-
-without redesigning the architecture.
+The platform must improve operational efficiency, reduce manual work, increase transparency, and provide real-time information for management, staff, owners, tenants, and residents.
 
 ---
 
-# 4. Core Principles
+# Objectives
 
-Every module must follow these principles.
+The primary objectives of IRM Enterprise are:
 
-## 4.1 Single Source of Truth
-
-Each business entity must have only one authoritative source.
-
-Examples:
-
-* One resident profile
-* One unit record
-* One ownership record
-
-No duplicated business data.
+* Centralize all operational data.
+* Reduce duplicated information.
+* Standardize business workflows.
+* Improve communication between departments.
+* Enable automation of repetitive tasks.
+* Support future business expansion.
+* Provide mobile-first experiences.
+* Integrate with third-party systems.
 
 ---
 
-## 4.2 Modular Architecture
+# Business Scope
 
-Every business module must be independent.
+IRM Enterprise consists of the following major business domains.
 
-Modules communicate through services and repositories.
-
-Direct coupling between modules is prohibited.
-
----
-
-## 4.3 Enterprise Scalability
-
-Every design decision must support future growth.
-
-The architecture must scale from:
-
-50 Units
-
-to
-
-50,000 Units
-
-without redesign.
-
----
-
-## 4.4 Cloud Native
-
-IRM Enterprise is designed primarily for cloud deployment.
-
-Supported platforms:
-
-* Supabase
-* Vercel
-* Docker
-* Kubernetes
-
----
-
-## 4.5 Mobile First
-
-Every screen must be usable on:
-
-Desktop
-
-Tablet
-
-Mobile
-
-without creating separate applications.
-
----
-
-# 5. Business Domains
-
-The platform consists of the following major domains.
-
-## Core
+## Core Platform
 
 Authentication
 
@@ -143,7 +61,7 @@ Audit Logs
 
 ---
 
-## Property
+## Property Management
 
 Properties
 
@@ -157,9 +75,15 @@ Facilities
 
 Assets
 
+Common Areas
+
+Parking
+
+Utility Meters
+
 ---
 
-## Resident
+## Resident Management
 
 Owners
 
@@ -177,55 +101,71 @@ Vehicles
 
 Pets
 
+Move-In
+
+Move-Out
+
+Occupancy
+
 ---
 
-## Rental
+## Rental Management
 
 Reservations
 
-Contracts
-
 Guests
+
+Rental Contracts
 
 Housekeeping
 
-Owner Revenue
+Owner Stay
+
+Revenue Sharing
+
+Cleaning Schedule
 
 Rental Reports
 
 ---
 
-## Visitor
+## Visitor Management
 
 Visitor Registration
 
 QR Check-In
 
-Parking
+QR Check-Out
 
-Gate Access
-
-Visitor History
+Parking Access
 
 Blacklist
 
+Visitor History
+
+Visitor Statistics
+
 ---
 
-## Security
+## Security Management
 
-Security Guards
+Gate Operations
 
-Incident Reports
+Security Staff
 
 Patrol
 
+Incident Reports
+
 Access Logs
 
-Visitor Control
+Visitor Verification
+
+Emergency Events
 
 ---
 
-## Maintenance
+## Maintenance Management
 
 Work Orders
 
@@ -239,25 +179,31 @@ Vendors
 
 Service Contracts
 
+Asset Maintenance
+
 ---
 
-## Finance
-
-Accounting Integration
-
-Invoice Mapping
-
-Payment Records
+## Financial Integration
 
 SoftBis Integration
 
 Owner Statements
+
+Payment Records
+
+Invoice Mapping
+
+Outstanding Fees
+
+Financial Reports
 
 ---
 
 ## Communication
 
 Announcements
+
+Documents
 
 Push Notifications
 
@@ -267,105 +213,126 @@ Email
 
 SMS
 
-Documents
+Meeting Notifications
 
 ---
 
-# 6. Technology Stack
+# Target Users
 
-Frontend
+IRM Enterprise supports multiple user roles.
 
-* Next.js
-* React
-* TypeScript
-* Tailwind CSS
+* Super Administrator
+* Administrator
+* Committee
+* Security
+* Technician
+* Owner
+* Co-Owner
+* Tenant
+* Resident
+* Guest
 
-Backend
-
-* Supabase
-
-Authentication
-
-* Supabase Auth
-
-Database
-
-* PostgreSQL
-
-Storage
-
-* Supabase Storage
-
-Deployment
-
-* Vercel
+Each role operates under Role-Based Access Control (RBAC).
 
 ---
 
-# 7. Development Philosophy
+# Product Philosophy
 
-Every implementation must follow these rules.
+IRM Enterprise is designed using the following principles.
 
-1. Database First
+## Enterprise First
 
-2. Architecture First
-
-3. Repository Pattern
-
-4. Service Layer
-
-5. Reusable Components
-
-6. Strict TypeScript
-
-7. Security by Design
-
-8. Mobile First
-
-9. Performance First
-
-10. AI Assisted Development
+Every feature must support future expansion.
 
 ---
 
-# 8. AI Development Strategy
+## Database First
 
-The project is designed to be developed collaboratively with AI systems.
-
-ChatGPT is responsible for:
-
-* Enterprise Architecture
-* Database Design
-* System Design
-* Blueprint
-* Code Review
-* Quality Assurance
-
-Coding assistants (such as Antigravity or similar tools) are responsible for implementing code that conforms to this blueprint.
-
-No generated code should intentionally violate the architectural decisions documented here.
+Database architecture is designed before application development.
 
 ---
 
-# 9. Definition of Done
+## Architecture First
 
-A feature is considered complete only when:
-
-* Business requirements are implemented.
-* TypeScript passes.
-* ESLint passes.
-* Production build succeeds.
-* Repository Pattern is maintained.
-* Service Layer is maintained.
-* Documentation is updated.
-* Git history remains clean.
+Business architecture is established before coding.
 
 ---
 
-# 10. Blueprint Authority
+## Security First
 
-This Blueprint is the primary reference for the entire IRM Enterprise project.
+Every feature must follow security best practices.
 
-Whenever there is a conflict between source code and documentation, the architecture described in this Blueprint shall be reviewed first, and any intentional architectural change must be reflected in this document.
+---
 
-All future modules must conform to this Blueprint.
+## Mobile First
+
+Every page must work seamlessly on phones, tablets, and desktop devices.
+
+---
+
+## Cloud Native
+
+The platform is optimized for cloud deployment and scalable infrastructure.
+
+---
+
+## AI Assisted Development
+
+The project is designed to be developed collaboratively with AI coding assistants following documented standards.
+
+---
+
+# Long-Term Vision
+
+IRM Enterprise is not intended to be a condominium management application only.
+
+It is intended to become a complete Enterprise Property Operating System capable of supporting:
+
+* Single Condominium
+* Multiple Condominiums
+* Apartment Groups
+* Hotels
+* Resorts
+* Mixed-Use Developments
+* Property Management Companies
+* Enterprise Organizations
+
+without changing the underlying architecture.
+
+---
+
+# Success Criteria
+
+IRM Enterprise will be considered successful when:
+
+* All operational departments work from one platform.
+* Data duplication is eliminated.
+* Manual paperwork is significantly reduced.
+* Real-time dashboards are available.
+* Business processes are standardized.
+* Future modules can be added without redesign.
+* Third-party integrations can be implemented through standard interfaces.
+
+---
+
+# Guiding Principles
+
+Every future development must satisfy these requirements.
+
+* Business requirements before implementation.
+* Blueprint before coding.
+* Documentation before deployment.
+* Architecture before optimization.
+* Quality before quantity.
+* Maintainability before shortcuts.
+* Scalability before convenience.
+
+---
+
+# Blueprint Authority
+
+This Project Vision defines the direction of the entire IRM Enterprise platform.
+
+Every future module, database table, API, user interface, workflow, and business process must align with this vision.
+
+Changes to this document require architectural review and should be recorded through the Architecture Decision Record (ADR) process.
