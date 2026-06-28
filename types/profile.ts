@@ -1,4 +1,4 @@
-import { Role } from "@/shared/auth/roles";
+import { Role } from "@/shared/auth";
 
 export type Profile = {
   id: string;

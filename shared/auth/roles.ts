@@ -1,27 +1,22 @@
-export const Roles = {
+export const ROLES = {
   SUPER_ADMIN: "super_admin",
+  PROPERTY_ADMIN: "property_admin",
+  MANAGER: "manager",
 
-  ADMIN: "admin",
+  OWNER: "owner",
+  CO_OWNER: "co_owner",
+  TENANT: "tenant",
+  RESIDENT: "resident",
+
+  SECURITY: "security",
+  TECHNICIAN: "technician",
+  ACCOUNTING: "accounting",
+  HOUSEKEEPING: "housekeeping",
+  RECEPTION: "reception",
 
   COMMITTEE: "committee",
 
-  SECURITY: "security",
-
-  TECHNICIAN: "technician",
-
-  OWNER: "owner",
-
-  CO_OWNER: "co_owner",
-
-  TENANT: "tenant",
-
-  RESIDENT: "resident",
-  PROPERTY_MANAGER: "property_manager",
-
-OFFICE_STAFF: "office_staff",
-
-ACCOUNTING: "accounting",
+  GUEST: "guest",
 } as const;
 
-export type Role =
-  (typeof Roles)[keyof typeof Roles];
+export type Role = (typeof ROLES)[keyof typeof ROLES];
