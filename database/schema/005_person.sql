@@ -1,52 +1,37 @@
 -- =====================================================
 -- IRM Enterprise
 -- Module : Person
--- Version : 0.3.1
+-- Version : 0.3.0
 -- =====================================================
 
-CREATE TABLE person (
-
+CREATE TABLE IF NOT EXISTS person (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
     person_code VARCHAR(30) UNIQUE,
 
-    person_type VARCHAR(30) DEFAULT 'PERSON',
-
     title VARCHAR(30),
 
-    first_name VARCHAR(150) NOT NULL,
+    first_name VARCHAR(255) NOT NULL,
 
-    last_name VARCHAR(150),
+    last_name VARCHAR(255) NOT NULL,
 
-    first_name_en VARCHAR(150),
+    display_name VARCHAR(255),
 
-    last_name_en VARCHAR(150),
+    gender VARCHAR(30),
 
-    nickname VARCHAR(100),
-
-    gender VARCHAR(20),
-
-    birth_date DATE,
+    date_of_birth DATE,
 
     nationality VARCHAR(100),
 
-    id_card VARCHAR(30),
-
-    passport_no VARCHAR(50),
-
-    tax_id VARCHAR(30),
-
-    mobile VARCHAR(50),
-
-    phone VARCHAR(50),
+    phone VARCHAR(100),
 
     email VARCHAR(255),
 
-    line_id VARCHAR(100),
+    id_card VARCHAR(30),
 
-    photo_url TEXT,
+    passport VARCHAR(50),
 
-    preferred_language VARCHAR(10) DEFAULT 'th',
+    photo TEXT,
 
     status VARCHAR(30) DEFAULT 'ACTIVE',
 
@@ -61,14 +46,11 @@ CREATE TABLE person (
     deleted_at TIMESTAMP
 );
 
-CREATE INDEX idx_person_code
+CREATE INDEX IF NOT EXISTS idx_person_code
 ON person(person_code);
 
-CREATE INDEX idx_person_name
-ON person(first_name,last_name);
+CREATE INDEX IF NOT EXISTS idx_person_name
+ON person(first_name, last_name);
 
-CREATE INDEX idx_person_email
-ON person(email);
-
-CREATE INDEX idx_person_mobile
-ON person(mobile);
+CREATE INDEX IF NOT EXISTS idx_person_status
+ON person(status);

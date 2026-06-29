@@ -4,32 +4,46 @@ import {
   IconProperty,
   IconResidents,
   IconRental,
-  IconWorkOrders,
   IconVisitors,
-  IconSecurity,
-  IconReports,
   IconSettings,
 } from "../../components/icons/LucideLike";
 
 export type NavItem = {
   id: string;
-  labelKey: string;
+  label: string;
   href: string;
   icon: ComponentType<{ className?: string }>;
-  permission?: string;
-  badge?: string | number;
 };
 
-export const navConfig: NavItem[] = [
-  { id: "dashboard", labelKey: "dashboard", href: "/", icon: IconDashboard },
-  { id: "property", labelKey: "property", href: "/property", icon: IconProperty },
-  { id: "residents", labelKey: "residents", href: "/residents", icon: IconResidents },
-  { id: "rental", labelKey: "rental", href: "/rental", icon: IconRental },
-  { id: "work-orders", labelKey: "workOrders", href: "/work-orders", icon: IconWorkOrders },
-  { id: "visitors", labelKey: "visitors", href: "/visitors", icon: IconVisitors },
-  { id: "security", labelKey: "security", href: "/security", icon: IconSecurity },
-  { id: "reports", labelKey: "reports", href: "/reports", icon: IconReports },
-  { id: "settings", labelKey: "settings", href: "/settings", icon: IconSettings },
+export type NavSection = {
+  section: string;
+  items: NavItem[];
+};
+
+export const navConfig: NavSection[] = [
+  {
+    section: "Master Data",
+    items: [
+      { id: "properties", label: "Properties", href: "/properties", icon: IconProperty },
+      { id: "units", label: "Units", href: "/units", icon: IconProperty },
+      { id: "persons", label: "Persons", href: "/persons", icon: IconResidents },
+      { id: "occupancies", label: "Occupancies", href: "/occupancies", icon: IconRental },
+    ]
+  },
+  {
+    section: "Operations",
+    items: [
+      { id: "import", label: "Import Master Data", href: "/import", icon: IconDashboard },
+      { id: "search", label: "Search", href: "/search", icon: IconVisitors },
+    ]
+  },
+  {
+    section: "System",
+    items: [
+      { id: "dashboard", label: "Dashboard (Placeholder)", href: "/", icon: IconDashboard },
+      { id: "settings", label: "Settings (Placeholder)", href: "/settings", icon: IconSettings },
+    ]
+  }
 ];
 
 export default navConfig;
