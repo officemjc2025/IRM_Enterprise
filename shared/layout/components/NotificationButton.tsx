@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 export function NotificationButton() {
   const [open, setOpen] = useState(false);
+  const { t } = useLanguage();
 
   return (
     <div className="relative">
@@ -21,8 +23,8 @@ export function NotificationButton() {
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           <div className="absolute right-0 mt-2 w-80 bg-slate-800 border border-slate-700 rounded-lg shadow-lg py-2 z-20">
             <div className="px-4 py-1.5 border-b border-slate-700 font-semibold text-sm text-white flex justify-between items-center">
-              <span>Notifications</span>
-              <span className="text-xs text-[#D4AF37]">3 unread</span>
+              <span>{t.topNav.notifications}</span>
+              <span className="text-xs text-[#D4AF37]">{`3 ${t.topNav.unread}`}</span>
             </div>
             <div className="divide-y divide-slate-700 max-h-64 overflow-y-auto">
               <div className="px-4 py-3 text-xs hover:bg-slate-700 text-slate-300">

@@ -3,9 +3,11 @@
 import React from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 export function Breadcrumb() {
   const pathname = usePathname();
+  const { t } = useLanguage();
   if (pathname === "/") return null;
 
   const segments = pathname.split("/").filter(Boolean);
@@ -15,7 +17,7 @@ export function Breadcrumb() {
       <ol className="flex flex-wrap items-center gap-1.5 font-medium">
         <li>
           <Link href="/" className="hover:text-slate-200 transition">
-            Dashboard
+            {t.navigation.dashboard}
           </Link>
         </li>
         {segments.map((seg, idx) => {

@@ -1,0 +1,15 @@
+[33m7c2cf1e[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m chore(project): transition to release epic feature task development model
+[33m7ddbb5a[m feat(core): complete platform foundation and metro admin console
+[33m6c664a9[m docs(mvp): adopt master data engine roadmap
+[33m2abff1d[m docs(strategy): adopt production-first mvp workflow
+[33m21583a4[m feat(property): implement property module mvp
+[33m6b78e65[m feat(property): create property domain foundation
+[33m7b029ec[m feat(auth): add shared authentication types
+[33m459b7ea[m feat(auth): improve session lifecycle management
+[33m90197c3[m[33m ([m[1;33mtag: [m[1;33mblueprint-v1.0[m[33m)[m docs(blueprint): complete foundation v1.0
+[33m6ee8fd6[m docs(blueprint): complete chapter 04 ui ux standards
+[33m43f0a43[m docs(blueprint): complete chapter 04 ui ux standards
+[33m3630501[m docs(blueprint): complete chapter 03 enterprise RBAC
+[33m70b5d97[m docs(blueprint): complete chapter 02 master database architecture
+[33m903e83c[m docs(architecture): initialize enterprise documentation framework
+[33m21507b4[m docs(prompts): initialize AI prompt library

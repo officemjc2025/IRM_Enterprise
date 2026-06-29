@@ -26,6 +26,7 @@ export const navConfig: NavSection[] = [
     items: [
       { id: "properties", label: "Properties", href: "/properties", icon: IconProperty },
       { id: "units", label: "Units", href: "/units", icon: IconProperty },
+      { id: "owners", label: "Owners", href: "/owners", icon: IconResidents },
       { id: "persons", label: "Persons", href: "/persons", icon: IconResidents },
       { id: "occupancies", label: "Occupancies", href: "/occupancies", icon: IconRental },
     ]

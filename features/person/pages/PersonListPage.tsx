@@ -4,8 +4,10 @@ import React, { useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import Link from "next/link";
 import { Person } from "../types/person.types";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 export default function PersonListPage() {
+  const { t } = useLanguage();
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -61,19 +63,19 @@ export default function PersonListPage() {
     <MainLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">People Directory</h2>
+          <h2 className="text-xl font-semibold">{t.person.directory}</h2>
           <Link
             href="/persons/create"
             className="px-4 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-medium"
           >
-            Create Person
+            {t.person.createPerson}
           </Link>
         </div>
 
         <form onSubmit={handleSearch} className="flex items-center gap-2">
           <input
             type="text"
-            placeholder="Search by name, code, email, or phone..."
+            placeholder={t.person.searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="flex-1 max-w-md p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm"
@@ -82,27 +84,27 @@ export default function PersonListPage() {
             type="submit"
             className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded-lg text-sm font-medium"
           >
-            Search
+            {t.common.search}
           </button>
         </form>
 
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden">
           {loading ? (
-            <div className="p-6 text-center text-slate-500">Loading...</div>
+            <div className="p-6 text-center text-slate-500">{t.common.loading}</div>
           ) : paginatedPeople.length === 0 ? (
-            <div className="p-6 text-center text-slate-500">No people found.</div>
+            <div className="p-6 text-center text-slate-500">{t.person.noPeopleFound}</div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                  <th className="p-4">Photo</th>
-                  <th className="p-4">Person Code</th>
-                  <th className="p-4">Full Name</th>
-                  <th className="p-4">Display Name</th>
-                  <th className="p-4">Phone</th>
-                  <th className="p-4">Email</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4 text-right">Actions</th>
+                  <th className="p-4">{t.person.photo}</th>
+                  <th className="p-4">{t.person.personCode}</th>
+                  <th className="p-4">{t.person.fullName}</th>
+                  <th className="p-4">{t.person.displayName}</th>
+                  <th className="p-4">{t.common.phone}</th>
+                  <th className="p-4">{t.common.email}</th>
+                  <th className="p-4">{t.common.status}</th>
+                  <th className="p-4 text-right">{t.common.actions}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
@@ -145,19 +147,19 @@ export default function PersonListPage() {
                         href={`/persons/${p.id}`}
                         className="text-slate-600 hover:text-slate-955 dark:text-slate-400"
                       >
-                        View
+                        {t.common.view}
                       </Link>
                       <Link
                         href={`/persons/${p.id}/edit`}
                         className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400"
                       >
-                        Edit
+                        {t.common.edit}
                       </Link>
                       <button
                         onClick={() => handleDelete(p.id)}
                         className="text-red-600 hover:text-red-900 dark:text-red-400"
                       >
-                        Archive
+                        {t.common.archive}
                       </button>
                     </td>
                   </tr>
@@ -170,8 +172,8 @@ export default function PersonListPage() {
         {totalPages > 1 && (
           <div className="flex justify-between items-center text-sm text-slate-500">
             <div>
-              Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, people.length)} of{" "}
-              {people.length} people
+              {t.common.showing} {startIndex + 1} {t.common.to} {Math.min(startIndex + itemsPerPage, people.length)} {t.common.of}{" "}
+              {people.length} {t.person.items}
             </div>
             <div className="flex space-x-1">
               <button
@@ -179,7 +181,7 @@ export default function PersonListPage() {
                 onClick={() => setCurrentPage((c) => c - 1)}
                 className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg disabled:opacity-50"
               >
-                Previous
+                {t.common.previous}
               </button>
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                 <button
@@ -199,7 +201,7 @@ export default function PersonListPage() {
                 onClick={() => setCurrentPage((c) => c - 1)}
                 className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg disabled:opacity-50"
               >
-                Next
+                {t.common.next}
               </button>
             </div>
           </div>

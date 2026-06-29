@@ -4,9 +4,11 @@ import React, { useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useRouter } from "next/navigation";
 import { Visitor } from "../types/visitor.types";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 export default function VisitorHistoryPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -70,14 +72,14 @@ export default function VisitorHistoryPage() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold">Visitor Directory</h2>
-            <p className="text-sm text-slate-500">View check-in logs and active visits.</p>
+            <h2 className="text-xl font-bold">{t.visitor.directory}</h2>
+            <p className="text-sm text-slate-500">{t.visitor.directoryDescription}</p>
           </div>
           <button
             onClick={() => router.push("/visitors/check-in")}
             className="px-4 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-semibold transition"
           >
-            Check-in New Visitor
+            {t.visitor.checkInNew}
           </button>
         </div>
 
@@ -90,7 +92,7 @@ export default function VisitorHistoryPage() {
         <div className="flex gap-2">
           <input
             type="text"
-            placeholder="Search by visitor name, ID number, phone, plate, or unit..."
+            placeholder={t.visitor.searchPlaceholder}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="flex-1 p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm shadow-sm outline-none"
@@ -99,19 +101,19 @@ export default function VisitorHistoryPage() {
 
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg overflow-hidden shadow-sm">
           {loading ? (
-            <div className="p-12 text-center text-slate-500">Loading logs...</div>
+            <div className="p-12 text-center text-slate-500">{t.visitor.loadingLogs}</div>
           ) : filtered.length === 0 ? (
-            <div className="p-12 text-center text-slate-500 text-sm">No visitor records found.</div>
+            <div className="p-12 text-center text-slate-500 text-sm">{t.visitor.noRecords}</div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-semibold text-slate-600 dark:text-slate-300">
-                  <th className="p-3">Visitor No. & Name</th>
-                  <th className="p-3">Unit</th>
-                  <th className="p-3">Plate No.</th>
-                  <th className="p-3">Check-in Time</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3 text-right">Actions</th>
+                  <th className="p-3">{t.visitor.visitorNoAndName}</th>
+                  <th className="p-3">{t.unit.title}</th>
+                  <th className="p-3">{t.visitor.plateNo}</th>
+                  <th className="p-3">{t.visitor.checkInTime}</th>
+                  <th className="p-3">{t.common.status}</th>
+                  <th className="p-3 text-right">{t.common.actions}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
@@ -135,7 +137,7 @@ export default function VisitorHistoryPage() {
                             : "bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300"
                         }`}
                       >
-                        {v.status === "CHECKED_IN" ? "Checked In" : "Checked Out"}
+                        {v.status === "CHECKED_IN" ? t.visitor.checkedIn : t.visitor.checkedOut}
                       </span>
                     </td>
                     <td className="p-3 text-right space-x-2 text-xs">
@@ -143,14 +145,14 @@ export default function VisitorHistoryPage() {
                         onClick={() => router.push(`/visitors/${v.id}`)}
                         className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400"
                       >
-                        Details
+                        {t.common.details}
                       </button>
                       {v.status === "CHECKED_IN" && (
                         <button
                           onClick={() => handleCheckout(v.id)}
                           className="text-amber-600 hover:text-amber-900 dark:text-amber-400"
                         >
-                          Checkout
+                          {t.visitor.checkout}
                         </button>
                       )}
                     </td>

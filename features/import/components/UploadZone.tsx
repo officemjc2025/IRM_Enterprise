@@ -1,22 +1,25 @@
 "use client";
 
 import React, { useRef, useState } from "react";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 interface UploadZoneProps {
   onFileSelected: (file: File) => void;
   loading: boolean;
+  onError: (error: string) => void;
 }
 
-export default function UploadZone({ onFileSelected, loading }: UploadZoneProps) {
+export default function UploadZone({ onFileSelected, loading, onError }: UploadZoneProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragActive, setIsDragActive] = useState(false);
+  const { t } = useLanguage();
 
   const processFile = (file: File) => {
     const extension = file.name.split(".").pop()?.toLowerCase();
-    if (extension === "xlsx" || extension === "csv") {
+    if (extension === "xlsx" || extension === "xls") {
       onFileSelected(file);
     } else {
-      alert("Invalid file type. Please upload a .xlsx or .csv file.");
+      onError("invalidFileType");
     }
   };
 
@@ -52,27 +55,30 @@ export default function UploadZone({ onFileSelected, loading }: UploadZoneProps)
       onDragOver={handleDrag}
       onDragLeave={handleDrag}
       onDrop={handleDrop}
-      className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+      className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-colors ${
         isDragActive
           ? "border-[#D4AF37] bg-[#D4AF37]/5"
-          : "border-slate-200 dark:border-slate-700 hover:border-[#D4AF37]"
+          : "border-slate-200 dark:border-slate-700/80 hover:border-[#D4AF37]"
       }`}
       onClick={() => !loading && fileInputRef.current?.click()}
     >
       <input
         ref={fileInputRef}
         type="file"
-        accept=".xlsx,.csv"
+        accept=".xlsx,.xls"
         className="hidden"
         onChange={handleChange}
         disabled={loading}
       />
       <div className="flex flex-col items-center justify-center space-y-3">
-        <span className="text-4xl text-slate-400">📁</span>
-        <div className="text-sm">
-          <span className="font-semibold text-[#D4AF37]">Click to upload</span> or drag and drop
+        <span className="text-4xl text-slate-400">📊</span>
+        <div className="text-sm text-slate-700 dark:text-slate-300">
+          <span className="font-semibold text-[#D4AF37]">{t.import.uploadAreaTitle.split("or")[0]}</span>
+          {t.import.uploadAreaTitle.includes("or") ? "or " + t.import.uploadAreaTitle.split("or")[1] : ""}
         </div>
-        <div className="text-xs text-slate-400">Excel (.xlsx) or CSV files only</div>
+        <div className="text-xs text-slate-400 dark:text-slate-500">
+          {t.import.uploadAreaSubtitle}
+        </div>
       </div>
     </div>
   );

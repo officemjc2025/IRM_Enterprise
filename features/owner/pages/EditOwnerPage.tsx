@@ -4,12 +4,14 @@ import React, { use, useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useRouter } from "next/navigation";
 import { Status } from "@/shared/enums/status";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 interface EditOwnerProps {
   params: Promise<{ id: string }>;
 }
 
 export default function EditOwnerPage({ params }: EditOwnerProps) {
+  const { t } = useLanguage();
   const router = useRouter();
   const { id } = use(params);
   const [ownerCode, setOwnerCode] = useState("");
@@ -86,12 +88,12 @@ export default function EditOwnerPage({ params }: EditOwnerProps) {
     <MainLayout>
       <div className="max-w-xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Edit Owner</h2>
+          <h2 className="text-xl font-semibold">{t.owner.editOwner}</h2>
         </div>
 
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg p-6 shadow-sm">
           {loading ? (
-            <div className="text-center text-slate-500">Loading...</div>
+            <div className="text-center text-slate-500">{t.common.loading}</div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
@@ -101,7 +103,7 @@ export default function EditOwnerPage({ params }: EditOwnerProps) {
               )}
 
               <div>
-                <label className="block text-sm font-medium mb-1">Owner Code *</label>
+                <label className="block text-sm font-medium mb-1">{t.owner.ownerCode} *</label>
                 <input
                   type="text"
                   required
@@ -112,7 +114,7 @@ export default function EditOwnerPage({ params }: EditOwnerProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Full Name *</label>
+                <label className="block text-sm font-medium mb-1">{t.owner.fullName} *</label>
                 <input
                   type="text"
                   required
@@ -123,7 +125,7 @@ export default function EditOwnerPage({ params }: EditOwnerProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Phone</label>
+                <label className="block text-sm font-medium mb-1">{t.owner.phone}</label>
                 <input
                   type="text"
                   value={phone}
@@ -133,7 +135,7 @@ export default function EditOwnerPage({ params }: EditOwnerProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Email</label>
+                <label className="block text-sm font-medium mb-1">{t.owner.email}</label>
                 <input
                   type="email"
                   value={email}
@@ -143,7 +145,7 @@ export default function EditOwnerPage({ params }: EditOwnerProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Nationality</label>
+                <label className="block text-sm font-medium mb-1">{t.owner.nationality}</label>
                 <input
                   type="text"
                   value={nationality}
@@ -153,7 +155,7 @@ export default function EditOwnerPage({ params }: EditOwnerProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Tax ID</label>
+                <label className="block text-sm font-medium mb-1">{t.owner.taxId}</label>
                 <input
                   type="text"
                   value={taxId}
@@ -163,14 +165,14 @@ export default function EditOwnerPage({ params }: EditOwnerProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Status</label>
+                <label className="block text-sm font-medium mb-1">{t.common.status}</label>
                 <select
                   value={status}
                   onChange={(e) => setStatus(e.target.value as Status)}
                   className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm"
                 >
-                  <option value={Status.ACTIVE}>Active</option>
-                  <option value={Status.INACTIVE}>Inactive</option>
+                  <option value={Status.ACTIVE}>{t.common.active}</option>
+                  <option value={Status.INACTIVE}>{t.common.inactive}</option>
                 </select>
               </div>
 
@@ -180,14 +182,14 @@ export default function EditOwnerPage({ params }: EditOwnerProps) {
                   onClick={() => router.push("/owners")}
                   className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm"
                 >
-                  Cancel
+                  {t.common.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
                   className="px-4 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-medium"
                 >
-                  {saving ? "Saving..." : "Save"}
+                  {saving ? t.common.saving : t.common.save}
                 </button>
               </div>
             </form>

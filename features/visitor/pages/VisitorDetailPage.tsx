@@ -4,6 +4,7 @@ import React, { use, useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useRouter } from "next/navigation";
 import { Visitor } from "../types/visitor.types";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 interface VisitorDetailProps {
   params: Promise<{ id: string }>;
@@ -11,6 +12,7 @@ interface VisitorDetailProps {
 
 export default function VisitorDetailPage({ params }: VisitorDetailProps) {
   const router = useRouter();
+  const { t } = useLanguage();
   const { id } = use(params);
   const [visitor, setVisitor] = useState<Visitor | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,12 +64,12 @@ export default function VisitorDetailPage({ params }: VisitorDetailProps) {
     <MainLayout>
       <div className="max-w-xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold">Visitor Details</h2>
+          <h2 className="text-xl font-bold">{t.visitor.details}</h2>
           <button
             onClick={() => router.push("/visitors")}
             className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm transition"
           >
-            Back to Directory
+            {t.common.backToDirectory}
           </button>
         </div>
 
@@ -76,7 +78,7 @@ export default function VisitorDetailPage({ params }: VisitorDetailProps) {
             {error}
           </div>
         ) : loading ? (
-          <div className="p-12 text-center text-slate-500">Loading details...</div>
+          <div className="p-12 text-center text-slate-500">{t.common.loading}</div>
         ) : (
           visitor && (
             <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg p-6 shadow-sm space-y-6">
@@ -99,38 +101,38 @@ export default function VisitorDetailPage({ params }: VisitorDetailProps) {
                       : "bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300"
                   }`}
                 >
-                  {visitor.status === "CHECKED_IN" ? "Checked In" : "Checked Out"}
+                  {visitor.status === "CHECKED_IN" ? t.visitor.checkedIn : t.visitor.checkedOut}
                 </span>
               </div>
 
               {/* Visit Details */}
               <div className="space-y-3">
                 <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2 text-sm">
-                  <span className="font-semibold text-slate-500">Visiting Unit</span>
+                  <span className="font-semibold text-slate-500">{t.visitor.visitUnit}</span>
                   <span className="col-span-2 font-mono font-semibold">Unit {visitor.unit?.unit_number}</span>
                 </div>
                 <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2 text-sm">
-                  <span className="font-semibold text-slate-500">Vehicle Plate</span>
+                  <span className="font-semibold text-slate-500">{t.visitor.vehiclePlate}</span>
                   <span className="col-span-2 font-mono">{visitor.vehicle_plate || "-"}</span>
                 </div>
                 <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2 text-sm">
-                  <span className="font-semibold text-slate-500">Company</span>
+                  <span className="font-semibold text-slate-500">{t.visitor.company}</span>
                   <span className="col-span-2 font-semibold text-slate-700 dark:text-slate-300">{visitor.company || "-"}</span>
                 </div>
                 <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2 text-sm">
-                  <span className="font-semibold text-slate-500">Purpose</span>
+                  <span className="font-semibold text-slate-500">{t.visitor.visitPurpose}</span>
                   <span className="col-span-2">{visitor.purpose}</span>
                 </div>
                 <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2 text-sm">
-                  <span className="font-semibold text-slate-500">Security Officer</span>
+                  <span className="font-semibold text-slate-500">{t.visitor.securityOfficer}</span>
                   <span className="col-span-2 font-medium">{visitor.security_user || "-"}</span>
                 </div>
                 <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2 text-sm">
-                  <span className="font-semibold text-slate-500">Check-in Time</span>
+                  <span className="font-semibold text-slate-500">{t.visitor.checkInTime}</span>
                   <span className="col-span-2">{new Date(visitor.check_in_time).toLocaleString()}</span>
                 </div>
                 <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2 text-sm">
-                  <span className="font-semibold text-slate-500">Expected Out</span>
+                  <span className="font-semibold text-slate-500">{t.visitor.expectedOut}</span>
                   <span className="col-span-2">
                     {visitor.expected_checkout_time
                       ? new Date(visitor.expected_checkout_time).toLocaleString()
@@ -139,12 +141,12 @@ export default function VisitorDetailPage({ params }: VisitorDetailProps) {
                 </div>
                 {visitor.actual_checkout_time && (
                   <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2 text-sm">
-                    <span className="font-semibold text-slate-500">Checked Out At</span>
+                    <span className="font-semibold text-slate-500">{t.visitor.checkedOutAt}</span>
                     <span className="col-span-2">{new Date(visitor.actual_checkout_time).toLocaleString()}</span>
                   </div>
                 )}
                 <div className="grid grid-cols-3 pb-2 text-sm">
-                  <span className="font-semibold text-slate-500">Remarks</span>
+                  <span className="font-semibold text-slate-500">{t.visitor.remarks}</span>
                   <span className="col-span-2 text-slate-600 dark:text-slate-300">{visitor.remarks || "-"}</span>
                 </div>
               </div>
@@ -155,7 +157,7 @@ export default function VisitorDetailPage({ params }: VisitorDetailProps) {
                     onClick={handleCheckout}
                     className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-semibold transition"
                   >
-                    Check Out Visitor Now
+                    {t.visitor.checkOutNow}
                   </button>
                 </div>
               )}

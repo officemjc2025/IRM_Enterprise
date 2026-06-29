@@ -4,8 +4,10 @@ import React, { useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import Link from "next/link";
 import { Owner } from "../types/owner.types";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 export default function OwnerListPage() {
+  const { t } = useLanguage();
   const [owners, setOwners] = useState<Owner[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -63,19 +65,19 @@ export default function OwnerListPage() {
     <MainLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Owners</h2>
+          <h2 className="text-xl font-semibold">{t.owner.title}</h2>
           <Link
             href="/owners/create"
             className="px-4 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-medium"
           >
-            Create Owner
+            {t.owner.createOwner}
           </Link>
         </div>
 
         <div className="flex items-center gap-4">
           <input
             type="text"
-            placeholder="Search by full name, code, email, or phone..."
+            placeholder={t.owner.searchPlaceholder}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -87,20 +89,20 @@ export default function OwnerListPage() {
 
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden">
           {loading ? (
-            <div className="p-6 text-center text-slate-500">Loading...</div>
+            <div className="p-6 text-center text-slate-500">{t.common.loading}</div>
           ) : paginatedOwners.length === 0 ? (
-            <div className="p-6 text-center text-slate-500">No owners found.</div>
+            <div className="p-6 text-center text-slate-500">{t.owner.noOwnersFound}</div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                  <th className="p-4">Owner Code</th>
-                  <th className="p-4">Full Name</th>
-                  <th className="p-4">Phone</th>
-                  <th className="p-4">Email</th>
-                  <th className="p-4">Nationality</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4 text-right">Actions</th>
+                  <th className="p-4">{t.owner.ownerCode}</th>
+                  <th className="p-4">{t.owner.fullName}</th>
+                  <th className="p-4">{t.owner.phone}</th>
+                  <th className="p-4">{t.owner.email}</th>
+                  <th className="p-4">{t.owner.nationality}</th>
+                  <th className="p-4">{t.common.status}</th>
+                  <th className="p-4 text-right">{t.common.actions}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
@@ -119,7 +121,7 @@ export default function OwnerListPage() {
                             : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
                         }`}
                       >
-                        {o.status}
+                        {o.status === "active" ? t.common.active : t.common.inactive}
                       </span>
                     </td>
                     <td className="p-4 text-right space-x-2">
@@ -127,19 +129,19 @@ export default function OwnerListPage() {
                         href={`/owners/${o.id}`}
                         className="text-slate-600 hover:text-slate-950 dark:text-slate-400"
                       >
-                        View
+                        {t.common.view}
                       </Link>
                       <Link
                         href={`/owners/${o.id}/edit`}
                         className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400"
                       >
-                        Edit
+                        {t.common.edit}
                       </Link>
                       <button
                         onClick={() => handleDelete(o.id)}
                         className="text-red-600 hover:text-red-900 dark:text-red-400"
                       >
-                        Archive
+                        {t.common.archive}
                       </button>
                     </td>
                   </tr>
@@ -152,8 +154,8 @@ export default function OwnerListPage() {
         {totalPages > 1 && (
           <div className="flex justify-between items-center text-sm text-slate-500">
             <div>
-              Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredOwners.length)} of{" "}
-              {filteredOwners.length} owners
+              {t.common.showing} {startIndex + 1} {t.common.to} {Math.min(startIndex + itemsPerPage, filteredOwners.length)} {t.common.of}{" "}
+              {filteredOwners.length} {t.owner.items}
             </div>
             <div className="flex space-x-1">
               <button
@@ -161,7 +163,7 @@ export default function OwnerListPage() {
                 onClick={() => setCurrentPage((c) => c - 1)}
                 className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg disabled:opacity-50"
               >
-                Previous
+                {t.common.previous}
               </button>
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                 <button
@@ -181,7 +183,7 @@ export default function OwnerListPage() {
                 onClick={() => setCurrentPage((c) => c + 1)}
                 className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg disabled:opacity-50"
               >
-                Next
+                {t.common.next}
               </button>
             </div>
           </div>

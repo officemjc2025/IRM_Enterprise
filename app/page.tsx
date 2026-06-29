@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import MainLayout from "../components/layout/MainLayout";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 function KpiCard({ title, value, href }: { title: string; value: string | number; href: string }) {
   return (
@@ -18,6 +19,7 @@ function KpiCard({ title, value, href }: { title: string; value: string | number
 }
 
 export default function Page() {
+  const { t } = useLanguage();
   const [counts, setCounts] = useState({
     properties: 0,
     units: 0,
@@ -66,26 +68,25 @@ export default function Page() {
       <div className="space-y-6">
         <section aria-labelledby="overview-heading">
           <div className="flex items-center justify-between">
-            <h2 id="overview-heading" className="text-xl font-bold">Metro Administration Console</h2>
+            <h2 id="overview-heading" className="text-xl font-bold">{t.dashboard.title}</h2>
           </div>
 
           {loading ? (
-            <div className="p-6 text-center text-slate-500">Loading metrics...</div>
+            <div className="p-6 text-center text-slate-500">{t.dashboard.loadingMetrics}</div>
           ) : (
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <KpiCard title="Properties" value={counts.properties} href="/properties" />
-              <KpiCard title="Units" value={counts.units} href="/units" />
-              <KpiCard title="Persons" value={counts.persons} href="/persons" />
-              <KpiCard title="Occupancies" value={counts.occupancies} href="/occupancies" />
+              <KpiCard title={t.dashboard.properties} value={counts.properties} href="/properties" />
+              <KpiCard title={t.dashboard.units} value={counts.units} href="/units" />
+              <KpiCard title={t.dashboard.persons} value={counts.persons} href="/persons" />
+              <KpiCard title={t.dashboard.occupancies} value={counts.occupancies} href="/occupancies" />
             </div>
           )}
         </section>
 
         <section className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-2">Welcome to IRM Enterprise</h3>
+          <h3 className="text-lg font-semibold mb-2">{t.dashboard.welcome}</h3>
           <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-            This console is the central workspace for Metro Jomtien condominium daily operations. 
-            Use the sidebar navigation to manage property assets, units, resident directories, and active occupancy assignments.
+            {t.dashboard.welcomeDescription}
           </p>
         </section>
       </div>

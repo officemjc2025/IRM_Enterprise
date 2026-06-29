@@ -1,87 +1,52 @@
 "use client";
 
 import { useState } from "react";
-import { ImportFile, PreviewResult, ColumnMapping, CanonicalField, ValidationResult } from "../types/import.types";
-import { importService } from "@/services/import/import.service";
+import { ImportFile } from "../types/import.types";
+import { FileValidationResult, validateFileStructure } from "../utils/excelValidator";
 
 export function useImport() {
   const [file, setFile] = useState<ImportFile | null>(null);
-  const [previewData, setPreviewData] = useState<PreviewResult | null>(null);
-  const [fullParsedData, setFullParsedData] = useState<PreviewResult | null>(null);
-  const [mapping, setMapping] = useState<ColumnMapping>({});
-  const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState<number>(1); // Step 1: Upload, Step 2: Validate
   const [error, setError] = useState<string | null>(null);
-
   const [isValidating, setIsValidating] = useState(false);
-  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+  const [validationResult, setValidationResult] = useState<FileValidationResult | null>(null);
 
-  const handleFileSelect = async (rawFile: File) => {
-    setLoading(true);
+  const handleFileSelect = (rawFile: File) => {
     setError(null);
     setValidationResult(null);
-    try {
-      const importFile: ImportFile = {
-        name: rawFile.name,
-        size: rawFile.size,
-        type: rawFile.type || rawFile.name.split(".").pop() || "",
-        rawFile,
-      };
-      setFile(importFile);
 
-      const parsedPreview = await importService.preview(rawFile);
-      setPreviewData(parsedPreview);
+    const name = rawFile.name;
+    const extension = name.split(".").pop()?.toLowerCase();
 
-      const parsedFull = await importService.readFile(rawFile);
-      setFullParsedData(parsedFull);
-
-      const savedMapping = importService.loadMapping(parsedPreview.headers);
-      if (savedMapping) {
-        setMapping(savedMapping);
-      } else {
-        const autoMapping = importService.autoMap(parsedPreview.headers);
-        setMapping(autoMapping);
-      }
-    } catch (err) {
-      console.error("Error parsing file:", err);
-      setError(err instanceof Error ? err.message : "Failed to parse file");
+    if (extension !== "xlsx" && extension !== "xls") {
+      setError("invalidFileType");
       setFile(null);
-      setPreviewData(null);
-      setFullParsedData(null);
-      setMapping({});
-    } finally {
-      setLoading(false);
+      return;
     }
+
+    const importFile: ImportFile = {
+      name,
+      size: rawFile.size,
+      type: rawFile.type || extension,
+      rawFile,
+    };
+
+    setFile(importFile);
+    setStep(1); // Stay on step 1 when new file selected
   };
 
-  const updateMapping = (header: string, field: CanonicalField | "") => {
-    setMapping((prev) => {
-      const updated = { ...prev, [header]: field };
-      if (previewData) {
-        importService.saveMapping(previewData.headers, updated);
-      }
-      setValidationResult(null);
-      return updated;
-    });
-  };
+  const runFileValidation = async () => {
+    if (!file?.rawFile) return;
 
-  const triggerAutoMapping = () => {
-    if (previewData) {
-      const autoMapping = importService.autoMap(previewData.headers);
-      setMapping(autoMapping);
-      importService.saveMapping(previewData.headers, autoMapping);
-      setValidationResult(null);
-    }
-  };
-
-  const runValidation = () => {
-    if (!fullParsedData) return;
     setIsValidating(true);
     setError(null);
     try {
-      const result = importService.validateData(fullParsedData.rows, mapping);
+      const result = await validateFileStructure(file.rawFile);
       setValidationResult(result);
+      setStep(2); // Go to validation step to show results
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Validation failed");
+      console.error("Validation failed:", err);
+      setError("validationErrorMsg");
     } finally {
       setIsValidating(false);
     }
@@ -89,25 +54,21 @@ export function useImport() {
 
   const clear = () => {
     setFile(null);
-    setPreviewData(null);
-    setFullParsedData(null);
-    setMapping({});
+    setStep(1);
     setValidationResult(null);
     setError(null);
   };
 
   return {
     file,
-    previewData,
-    mapping,
-    loading,
+    step,
+    setStep,
     error,
+    setError,
     isValidating,
     validationResult,
     handleFileSelect,
-    updateMapping,
-    triggerAutoMapping,
-    runValidation,
+    runFileValidation,
     clear,
   };
 }

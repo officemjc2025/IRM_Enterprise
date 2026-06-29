@@ -7,8 +7,10 @@ import { Unit } from "@/features/unit/types/unit.types";
 import { Occupancy } from "@/features/occupancy/types/occupancy.types";
 import { Visitor } from "../types/visitor.types";
 import { AuthContext } from "@/providers/AuthProvider";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 function UnitResultCard({ unit, onSelect }: { unit: Unit; onSelect: (unit: Unit) => void }) {
+  const { t } = useLanguage();
   const [occupancies, setOccupancies] = useState<Occupancy[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -31,8 +33,8 @@ function UnitResultCard({ unit, onSelect }: { unit: Unit; onSelect: (unit: Unit)
 
   const activeOccupants = occupancies.filter(o => o.status === "active");
   const summaryText = activeOccupants.length > 0 
-    ? `${activeOccupants.length} Active Occupant(s)`
-    : "No Active Occupants";
+    ? `${activeOccupants.length} ${t.occupancy.activeOccupants}`
+    : t.visitor.noActiveOccupants;
 
   return (
     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 rounded-lg p-5 shadow-sm space-y-4 hover:border-[#D4AF37] transition duration-200">
@@ -53,15 +55,15 @@ function UnitResultCard({ unit, onSelect }: { unit: Unit; onSelect: (unit: Unit)
       </div>
 
       <div className="space-y-1">
-        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Occupancy Summary</span>
+        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">{t.visitor.occupancySummary}</span>
         <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-          {loading ? "Loading..." : summaryText}
+          {loading ? t.common.loading : summaryText}
         </p>
       </div>
 
       {!loading && activeOccupants.length > 0 && (
         <div className="space-y-1.5 border-t border-slate-100 dark:border-slate-700/60 pt-2">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Current Occupants</span>
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">{t.visitor.currentOccupants}</span>
           <ul className="text-xs space-y-1">
             {activeOccupants.map(o => (
               <li key={o.id} className="text-slate-600 dark:text-slate-400 font-medium">
@@ -77,7 +79,7 @@ function UnitResultCard({ unit, onSelect }: { unit: Unit; onSelect: (unit: Unit)
           onClick={() => onSelect(unit)}
           className="flex-1 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-xs font-semibold transition"
         >
-          Select for Visitor Registration
+          {t.visitor.selectForRegistration}
         </button>
         <a
           href={`/units/${unit.id}`}
@@ -85,7 +87,7 @@ function UnitResultCard({ unit, onSelect }: { unit: Unit; onSelect: (unit: Unit)
           rel="noopener noreferrer"
           className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/30 transition text-center flex items-center justify-center font-medium"
         >
-          Detail Page
+          {t.visitor.detailPage}
         </a>
       </div>
     </div>
@@ -94,6 +96,7 @@ function UnitResultCard({ unit, onSelect }: { unit: Unit; onSelect: (unit: Unit)
 
 export default function VisitorCheckInPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const auth = useContext(AuthContext);
   const [step, setStep] = useState(0); // 0: Select Unit, 1: Enter Details, 2: Success Confirmation
 
@@ -250,13 +253,13 @@ export default function VisitorCheckInPage() {
       <div className="max-w-xl mx-auto space-y-6">
         {/* Step Indicator */}
         <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-4">
-          <h2 className="text-xl font-bold">Visitor Check-In</h2>
+          <h2 className="text-xl font-bold">{t.visitor.checkIn}</h2>
           <div className="flex gap-2 text-xs font-semibold text-slate-400">
-            <span className={step === 0 ? "text-[#D4AF37]" : ""}>1. Select Unit</span>
+            <span className={step === 0 ? "text-[#D4AF37]" : ""}>{t.visitor.selectUnit}</span>
             <span>/</span>
-            <span className={step === 1 ? "text-[#D4AF37]" : ""}>2. Check-in Form</span>
+            <span className={step === 1 ? "text-[#D4AF37]" : ""}>{t.visitor.checkInForm}</span>
             <span>/</span>
-            <span className={step === 2 ? "text-[#D4AF37]" : ""}>3. Success</span>
+            <span className={step === 2 ? "text-[#D4AF37]" : ""}>{t.visitor.success}</span>
           </div>
         </div>
 
@@ -264,10 +267,10 @@ export default function VisitorCheckInPage() {
         {step === 0 && (
           <div className="space-y-4">
             <div className="space-y-1">
-              <label className="text-sm font-semibold">Search Target Unit</label>
+              <label className="text-sm font-semibold">{t.visitor.searchUnit}</label>
               <input
                 type="text"
-                placeholder="Type unit number (e.g. 101, A205)..."
+                placeholder={t.visitor.searchUnitPlaceholder}
                 value={searchUnitTerm}
                 onChange={(e) => setSearchUnitTerm(e.target.value)}
                 className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm shadow-sm outline-none focus:border-[#D4AF37]"
@@ -277,9 +280,9 @@ export default function VisitorCheckInPage() {
 
             <div className="space-y-4 max-h-[500px] overflow-y-auto pr-1">
               {loadingUnits ? (
-                <div className="p-8 text-center text-slate-500 text-sm">Loading units...</div>
+                <div className="p-8 text-center text-slate-500 text-sm">{t.visitor.loadingUnits}</div>
               ) : filteredUnits.length === 0 ? (
-                <div className="p-8 text-center text-slate-500 text-sm">No units match &quot;{searchUnitTerm}&quot;.</div>
+                <div className="p-8 text-center text-slate-500 text-sm">{t.visitor.noUnitsMatch} &quot;{searchUnitTerm}&quot;.</div>
               ) : (
                 <div className="grid grid-cols-1 gap-4">
                   {filteredUnits.map((u) => (
@@ -297,7 +300,7 @@ export default function VisitorCheckInPage() {
                 onClick={() => router.push("/visitors")}
                 className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm"
               >
-                Cancel
+                {t.common.cancel}
               </button>
             </div>
           </div>
@@ -309,27 +312,27 @@ export default function VisitorCheckInPage() {
             {/* Autofill / Read-only details banner */}
             <div className="bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg p-5 space-y-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Auto-Filled Context
+                {t.visitor.autoFilledContext}
               </h3>
               <div className="grid grid-cols-2 gap-4 text-xs font-medium">
                 <div>
-                  <span className="text-slate-400 block mb-0.5">Visit Unit (Read-only)</span>
+                   <span className="text-slate-400 block mb-0.5">{t.visitor.visitUnit}</span>
                   <span className="text-slate-800 dark:text-slate-200 font-mono font-semibold">
                     Unit {selectedUnit.unit_number} ({selectedUnit.building_code || "Main"})
                   </span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block mb-0.5">Current Security User</span>
+                  <span className="text-slate-400 block mb-0.5">{t.visitor.currentSecurityUser}</span>
                   <span className="text-slate-800 dark:text-slate-200 font-semibold">{securityUser}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block mb-0.5">Check-in Time</span>
+                  <span className="text-slate-400 block mb-0.5">{t.visitor.checkInTime}</span>
                   <span className="text-slate-800 dark:text-slate-200 font-mono">{new Date().toLocaleString()}</span>
                 </div>
                 <div>
-                  <span className="text-slate-400 block mb-0.5">Occupancy Summary</span>
+                  <span className="text-slate-400 block mb-0.5">{t.visitor.occupancySummary}</span>
                   <span className="text-slate-800 dark:text-slate-200">
-                    {unitOccupancies.filter((o) => o.status === "active").length} Active Occupant(s)
+                    {unitOccupancies.filter((o) => o.status === "active").length} {t.occupancy.activeOccupants}
                   </span>
                 </div>
               </div>
@@ -343,7 +346,7 @@ export default function VisitorCheckInPage() {
 
             <form onSubmit={handleFormSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold mb-1">Visitor Name *</label>
+                <label className="block text-sm font-semibold mb-1">{t.visitor.visitorName} *</label>
                 <input
                   type="text"
                   required
@@ -356,7 +359,7 @@ export default function VisitorCheckInPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold mb-1">Phone Number</label>
+                  <label className="block text-sm font-semibold mb-1">{t.visitor.phoneNumber}</label>
                   <input
                     type="tel"
                     placeholder="e.g. 0812345678"
@@ -366,7 +369,7 @@ export default function VisitorCheckInPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold mb-1">Vehicle Plate</label>
+                  <label className="block text-sm font-semibold mb-1">{t.visitor.vehiclePlate}</label>
                   <input
                     type="text"
                     placeholder="e.g. กข 1234"
@@ -379,7 +382,7 @@ export default function VisitorCheckInPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold mb-1">ID Card</label>
+                  <label className="block text-sm font-semibold mb-1">{t.visitor.idCard}</label>
                   <input
                     type="text"
                     placeholder="National ID"
@@ -389,7 +392,7 @@ export default function VisitorCheckInPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold mb-1">Passport</label>
+                  <label className="block text-sm font-semibold mb-1">{t.visitor.passport}</label>
                   <input
                     type="text"
                     placeholder="Passport Number"
@@ -402,7 +405,7 @@ export default function VisitorCheckInPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold mb-1">Company</label>
+                  <label className="block text-sm font-semibold mb-1">{t.visitor.company}</label>
                   <input
                     type="text"
                     placeholder="e.g. Kerry, Grab"
@@ -412,23 +415,23 @@ export default function VisitorCheckInPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold mb-1">Visit Purpose *</label>
+                  <label className="block text-sm font-semibold mb-1">{t.visitor.visitPurpose} *</label>
                   <select
                     value={purpose}
                     onChange={(e) => setPurpose(e.target.value)}
                     className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm focus:border-[#D4AF37] outline-none"
                   >
-                    <option value="Guest">Guest / Friend</option>
-                    <option value="Delivery">Delivery / Courier</option>
-                    <option value="Maintenance">Maintenance / Contractor</option>
-                    <option value="Utility">Utility Service</option>
-                    <option value="Other">Other</option>
+                    <option value="Guest">{t.visitor.purposeGuest}</option>
+                    <option value="Delivery">{t.visitor.purposeDelivery}</option>
+                    <option value="Maintenance">{t.visitor.purposeMaintenance}</option>
+                    <option value="Utility">{t.visitor.purposeUtility}</option>
+                    <option value="Other">{t.visitor.purposeOther}</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold mb-1">Expected Checkout Time *</label>
+                <label className="block text-sm font-semibold mb-1">{t.visitor.expectedCheckout} *</label>
                 <input
                   type="datetime-local"
                   required
@@ -440,15 +443,15 @@ export default function VisitorCheckInPage() {
 
               {/* Photo Placeholder */}
               <div className="space-y-1">
-                <span className="block text-sm font-semibold">Visitor Photo</span>
+                <span className="block text-sm font-semibold">{t.visitor.visitorPhoto}</span>
                 <div className="border border-dashed border-slate-200 dark:border-slate-700 rounded-lg p-6 flex flex-col items-center justify-center gap-2 bg-slate-50/50 dark:bg-slate-800/50">
                   <span className="text-2xl text-slate-400">📷</span>
-                  <span className="text-xs text-slate-400">Photo Capture Disabled (Out of Scope)</span>
+                  <span className="text-xs text-slate-400">{t.visitor.photoDisabled}</span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-semibold mb-1">Remarks</label>
+                <label className="block text-sm font-semibold mb-1">{t.visitor.remarks}</label>
                 <textarea
                   placeholder="Additional visit notes..."
                   value={remarks}
@@ -463,14 +466,14 @@ export default function VisitorCheckInPage() {
                   onClick={() => setStep(0)}
                   className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium"
                 >
-                  Cancel
+                   {t.common.cancel}
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
                   className="px-4 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-semibold transition disabled:opacity-50"
                 >
-                  {submitting ? "Saving..." : "Continue"}
+                  {submitting ? t.common.saving : t.common.continue}
                 </button>
               </div>
             </form>
@@ -484,38 +487,38 @@ export default function VisitorCheckInPage() {
               ✓
             </div>
             <div className="space-y-1">
-              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Visitor Checked In Successfully</h3>
-              <p className="text-sm text-slate-500 font-medium">Visit record generated automatically.</p>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">{t.visitor.successTitle}</h3>
+              <p className="text-sm text-slate-500 font-medium">{t.visitor.successDescription}</p>
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg p-4 text-left divide-y divide-slate-100 dark:divide-slate-800 text-xs">
               <div className="py-2 flex justify-between">
-                <span className="text-slate-400 font-medium">Visitor Number</span>
+                <span className="text-slate-400 font-medium">{t.visitor.visitorNumber}</span>
                 <span className="font-semibold font-mono text-[#D4AF37]">{createdVisitor.visitor_number}</span>
               </div>
               <div className="py-2 flex justify-between">
-                <span className="text-slate-400 font-medium">Visitor Name</span>
+                <span className="text-slate-400 font-medium">{t.visitor.visitorName}</span>
                 <span className="font-semibold text-slate-800 dark:text-slate-200">{createdVisitor.visitor_name}</span>
               </div>
               <div className="py-2 flex justify-between">
-                <span className="text-slate-400 font-medium">Phone Number</span>
+                <span className="text-slate-400 font-medium">{t.visitor.phoneNumber}</span>
                 <span className="font-semibold">{createdVisitor.phone || "-"}</span>
               </div>
               <div className="py-2 flex justify-between">
-                <span className="text-slate-400 font-medium">Target Unit</span>
+                <span className="text-slate-400 font-medium">{t.visitor.targetUnit}</span>
                 <span className="font-semibold font-mono text-slate-800 dark:text-slate-200">Unit {createdVisitor.unit?.unit_number}</span>
               </div>
               <div className="py-2 flex justify-between">
-                <span className="text-slate-400 font-medium">Vehicle Plate</span>
+                <span className="text-slate-400 font-medium">{t.visitor.vehiclePlate}</span>
                 <span className="font-semibold font-mono">{createdVisitor.vehicle_plate || "-"}</span>
               </div>
               <div className="py-2 flex justify-between">
-                <span className="text-slate-400 font-medium">Check-in Time</span>
+                <span className="text-slate-400 font-medium">{t.visitor.checkInTime}</span>
                 <span className="font-semibold">{new Date(createdVisitor.check_in_time).toLocaleString()}</span>
               </div>
               <div className="py-2 flex justify-between">
-                <span className="text-slate-400 font-medium">Status</span>
-                <span className="font-semibold text-green-600 dark:text-green-400 uppercase">Checked In</span>
+                <span className="text-slate-400 font-medium">{t.common.status}</span>
+                <span className="font-semibold text-green-600 dark:text-green-400 uppercase">{t.visitor.checkedIn}</span>
               </div>
             </div>
 
@@ -524,7 +527,7 @@ export default function VisitorCheckInPage() {
                 onClick={() => router.push("/visitors")}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-sm font-semibold transition"
               >
-                Back to Directory
+                {t.common.backToDirectory}
               </button>
               <button
                 onClick={() => {
@@ -540,7 +543,7 @@ export default function VisitorCheckInPage() {
                 }}
                 className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition"
               >
-                Check-in Another
+                {t.visitor.checkInAnother}
               </button>
             </div>
           </div>

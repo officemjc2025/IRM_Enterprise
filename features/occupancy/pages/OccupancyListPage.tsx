@@ -4,8 +4,10 @@ import React, { useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import Link from "next/link";
 import { Occupancy, OccupancyType, OCCUPANCY_TYPES } from "../types/occupancy.types";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 export default function OccupancyListPage() {
+  const { t } = useLanguage();
   const [occupancies, setOccupancies] = useState<Occupancy[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -70,19 +72,19 @@ export default function OccupancyListPage() {
     <MainLayout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Occupancy List</h2>
+          <h2 className="text-xl font-semibold">{t.occupancy.list}</h2>
           <Link
             href="/occupancies/create"
             className="px-4 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-medium"
           >
-            Create Occupancy
+            {t.occupancy.createOccupancy}
           </Link>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <input
             type="text"
-            placeholder="Search by unit number or occupant name..."
+            placeholder={t.occupancy.searchPlaceholder}
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -99,10 +101,10 @@ export default function OccupancyListPage() {
             }}
             className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm"
           >
-            <option value="">All Occupancy Types</option>
-            {OCCUPANCY_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
+            <option value="">{t.common.allTypes}</option>
+            {OCCUPANCY_TYPES.map((ot) => (
+              <option key={ot} value={ot}>
+                {ot}
               </option>
             ))}
           </select>
@@ -115,28 +117,28 @@ export default function OccupancyListPage() {
             }}
             className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm"
           >
-            <option value="">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
+            <option value="">{t.common.allStatuses}</option>
+            <option value="active">{t.common.active}</option>
+            <option value="inactive">{t.common.inactive}</option>
           </select>
         </div>
 
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden">
           {loading ? (
-            <div className="p-6 text-center text-slate-500">Loading...</div>
+            <div className="p-6 text-center text-slate-500">{t.common.loading}</div>
           ) : paginatedOccupancies.length === 0 ? (
-            <div className="p-6 text-center text-slate-500">No occupancy records found.</div>
+            <div className="p-6 text-center text-slate-500">{t.occupancy.noRecords}</div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                  <th className="p-4">Unit Number</th>
-                  <th className="p-4">Occupant Name</th>
-                  <th className="p-4">Occupancy Type</th>
-                  <th className="p-4">Start Date</th>
-                  <th className="p-4">End Date</th>
-                  <th className="p-4">Status</th>
-                  <th className="p-4 text-right">Actions</th>
+                  <th className="p-4">{t.unit.unitNumber}</th>
+                  <th className="p-4">{t.occupancy.occupantName}</th>
+                  <th className="p-4">{t.occupancy.occupancyType}</th>
+                  <th className="p-4">{t.occupancy.startDate}</th>
+                  <th className="p-4">{t.occupancy.endDate}</th>
+                  <th className="p-4">{t.common.status}</th>
+                  <th className="p-4 text-right">{t.common.actions}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
@@ -148,7 +150,7 @@ export default function OccupancyListPage() {
                     </td>
                     <td className="p-4 font-semibold text-xs text-slate-500">{o.occupancy_type}</td>
                     <td className="p-4">{o.start_date}</td>
-                    <td className="p-4">{o.end_date || "Present"}</td>
+                    <td className="p-4">{o.end_date || t.unit.present}</td>
                     <td className="p-4">
                       <span
                         className={`px-2 py-1 rounded-full text-xs font-semibold ${
@@ -165,19 +167,19 @@ export default function OccupancyListPage() {
                         href={`/occupancies/${o.id}`}
                         className="text-slate-600 hover:text-slate-955 dark:text-slate-400"
                       >
-                        View
+                        {t.common.view}
                       </Link>
                       <Link
                         href={`/occupancies/${o.id}/edit`}
                         className="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400"
                       >
-                        Edit
+                        {t.common.edit}
                       </Link>
                       <button
                         onClick={() => handleDelete(o.id)}
                         className="text-red-600 hover:text-red-900 dark:text-red-400"
                       >
-                        Archive
+                        {t.common.archive}
                       </button>
                     </td>
                   </tr>
@@ -190,8 +192,8 @@ export default function OccupancyListPage() {
         {totalPages > 1 && (
           <div className="flex justify-between items-center text-sm text-slate-500">
             <div>
-              Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredOccupancies.length)} of{" "}
-              {filteredOccupancies.length} occupancies
+              {t.common.showing} {startIndex + 1} {t.common.to} {Math.min(startIndex + itemsPerPage, filteredOccupancies.length)} {t.common.of}{" "}
+              {filteredOccupancies.length} {t.occupancy.items}
             </div>
             <div className="flex space-x-1">
               <button
@@ -199,7 +201,7 @@ export default function OccupancyListPage() {
                 onClick={() => setCurrentPage((c) => c - 1)}
                 className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg disabled:opacity-50"
               >
-                Previous
+                {t.common.previous}
               </button>
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                 <button
@@ -219,7 +221,7 @@ export default function OccupancyListPage() {
                 onClick={() => setCurrentPage((c) => c - 1)}
                 className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg disabled:opacity-50"
               >
-                Next
+                {t.common.next}
               </button>
             </div>
           </div>

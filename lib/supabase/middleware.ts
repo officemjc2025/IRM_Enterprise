@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
-  const response = NextResponse.next({
+  let supabaseResponse = NextResponse.next({
     request,
   });
 
@@ -18,15 +18,56 @@ export async function updateSession(request: NextRequest) {
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value, options }) => {
             request.cookies.set(name, value);
-
-            response.cookies.set(name, value, options);
+          });
+          supabaseResponse = NextResponse.next({
+            request,
+          });
+          cookiesToSet.forEach(({ name, value, options }) => {
+            supabaseResponse.cookies.set(name, value, options);
           });
         },
       },
     }
   );
 
-  await supabase.auth.getUser();
+  const { data: { user } } = await supabase.auth.getUser();
+  const isLoginPage = request.nextUrl.pathname.startsWith("/login");
 
-  return response;
+  if (user && isLoginPage) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    const redirectResponse = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, {
+        path: cookie.path,
+        domain: cookie.domain,
+        maxAge: cookie.maxAge,
+        secure: cookie.secure,
+        httpOnly: cookie.httpOnly,
+        sameSite: cookie.sameSite,
+        expires: cookie.expires,
+      });
+    });
+    return redirectResponse;
+  }
+
+  if (!user && !isLoginPage) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    const redirectResponse = NextResponse.redirect(url);
+    supabaseResponse.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value, {
+        path: cookie.path,
+        domain: cookie.domain,
+        maxAge: cookie.maxAge,
+        secure: cookie.secure,
+        httpOnly: cookie.httpOnly,
+        sameSite: cookie.sameSite,
+        expires: cookie.expires,
+      });
+    });
+    return redirectResponse;
+  }
+
+  return supabaseResponse;
 }

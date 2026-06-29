@@ -11,42 +11,7 @@ import {
   IconVisitors,
   IconSettings,
 } from "@/components/icons/LucideLike";
-
-const navigationItems = [
-  {
-    section: "Master Data",
-    items: [
-      { id: "properties", label: "Properties", href: "/properties", icon: IconProperty },
-      { id: "units", label: "Units", href: "/units", icon: IconProperty },
-      { id: "persons", label: "Persons", href: "/persons", icon: IconResidents },
-      { id: "occupancies", label: "Occupancies", href: "/occupancies", icon: IconRental },
-    ]
-  },
-  {
-    section: "Operations",
-    items: [
-      { id: "import", label: "Import Master Data", href: "/import", icon: IconDashboard },
-      { id: "search", label: "Search", href: "/search", icon: IconVisitors },
-    ]
-  },
-  {
-    section: "Business",
-    items: [
-      { id: "visitors", label: "Visitors", href: "/visitors", icon: IconVisitors },
-      { id: "workorder-placeholder", label: "Work Order (Placeholder)", href: "/work-orders", icon: IconDashboard },
-      { id: "residents-placeholder", label: "Resident (Placeholder)", href: "/residents", icon: IconResidents },
-      { id: "security-placeholder", label: "Security (Placeholder)", href: "/security", icon: IconVisitors },
-      { id: "reports-placeholder", label: "Reports (Placeholder)", href: "/reports", icon: IconDashboard },
-    ]
-  },
-  {
-    section: "System",
-    items: [
-      { id: "dashboard", label: "Dashboard", href: "/", icon: IconDashboard },
-      { id: "settings", label: "Settings", href: "/settings", icon: IconSettings },
-    ]
-  }
-];
+import { useLanguage } from "@/providers/LanguageProvider";
 
 interface SidebarProps {
   onClose?: () => void;
@@ -55,6 +20,44 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onClose, collapsed, setCollapsed }: SidebarProps) {
+  const { t } = useLanguage();
+
+  const navigationItems = [
+    {
+      section: t.menu.masterData,
+      items: [
+        { id: "properties", label: t.menu.properties, href: "/properties", icon: IconProperty },
+        { id: "units", label: t.menu.units, href: "/units", icon: IconProperty },
+        { id: "owners", label: t.menu.owners, href: "/owners", icon: IconResidents },
+        { id: "persons", label: t.menu.persons, href: "/persons", icon: IconResidents },
+        { id: "occupancies", label: t.menu.occupancies, href: "/occupancies", icon: IconRental },
+      ]
+    },
+    {
+      section: t.menu.operations,
+      items: [
+        { id: "import", label: t.menu.import, href: "/import", icon: IconDashboard },
+        { id: "search", label: t.menu.search, href: "/search", icon: IconVisitors },
+      ]
+    },
+    {
+      section: t.menu.business,
+      items: [
+        { id: "visitors", label: t.menu.visitors, href: "/visitors", icon: IconVisitors },
+        { id: "workorder-placeholder", label: t.menu.workOrders, href: "/work-orders", icon: IconDashboard },
+        { id: "residents-placeholder", label: t.menu.residents, href: "/residents", icon: IconResidents },
+        { id: "security-placeholder", label: t.menu.security, href: "/security", icon: IconVisitors },
+        { id: "reports-placeholder", label: t.menu.reports, href: "/reports", icon: IconDashboard },
+      ]
+    },
+    {
+      section: t.menu.system,
+      items: [
+        { id: "dashboard", label: t.menu.dashboard, href: "/", icon: IconDashboard },
+        { id: "settings", label: t.menu.settings, href: "/settings", icon: IconSettings },
+      ]
+    }
+  ];
   return (
     <aside
       className={`h-full bg-[#0F172A] border-r border-[#D4AF37]/20 text-white flex flex-col transition-all duration-300 ${

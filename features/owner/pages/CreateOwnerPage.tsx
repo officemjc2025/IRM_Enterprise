@@ -4,8 +4,10 @@ import React, { useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useRouter } from "next/navigation";
 import { Status } from "@/shared/enums/status";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 export default function CreateOwnerPage() {
+  const { t } = useLanguage();
   const router = useRouter();
   const [ownerCode, setOwnerCode] = useState("");
   const [fullName, setFullName] = useState("");
@@ -54,7 +56,7 @@ export default function CreateOwnerPage() {
     <MainLayout>
       <div className="max-w-xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Create Owner</h2>
+          <h2 className="text-xl font-semibold">{t.owner.createOwner}</h2>
         </div>
 
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg p-6 shadow-sm">
@@ -66,7 +68,7 @@ export default function CreateOwnerPage() {
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-1">Owner Code *</label>
+              <label className="block text-sm font-medium mb-1">{t.owner.ownerCode} *</label>
               <input
                 type="text"
                 required
@@ -77,7 +79,7 @@ export default function CreateOwnerPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Full Name *</label>
+              <label className="block text-sm font-medium mb-1">{t.owner.fullName} *</label>
               <input
                 type="text"
                 required
@@ -88,7 +90,7 @@ export default function CreateOwnerPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Phone</label>
+              <label className="block text-sm font-medium mb-1">{t.owner.phone}</label>
               <input
                 type="text"
                 value={phone}
@@ -98,7 +100,7 @@ export default function CreateOwnerPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Email</label>
+              <label className="block text-sm font-medium mb-1">{t.owner.email}</label>
               <input
                 type="email"
                 value={email}
@@ -108,7 +110,7 @@ export default function CreateOwnerPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Nationality</label>
+              <label className="block text-sm font-medium mb-1">{t.owner.nationality}</label>
               <input
                 type="text"
                 value={nationality}
@@ -118,7 +120,7 @@ export default function CreateOwnerPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Tax ID</label>
+              <label className="block text-sm font-medium mb-1">{t.owner.taxId}</label>
               <input
                 type="text"
                 value={taxId}
@@ -128,14 +130,14 @@ export default function CreateOwnerPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Status</label>
+              <label className="block text-sm font-medium mb-1">{t.common.status}</label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as Status)}
                 className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm"
               >
-                <option value={Status.ACTIVE}>Active</option>
-                <option value={Status.INACTIVE}>Inactive</option>
+                <option value={Status.ACTIVE}>{t.common.active}</option>
+                <option value={Status.INACTIVE}>{t.common.inactive}</option>
               </select>
             </div>
 
@@ -145,14 +147,14 @@ export default function CreateOwnerPage() {
                 onClick={() => router.push("/owners")}
                 className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm"
               >
-                Cancel
+                {t.common.cancel}
               </button>
               <button
                 type="submit"
                 disabled={loading}
                 className="px-4 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-medium"
               >
-                {loading ? "Creating..." : "Create"}
+                {loading ? t.common.saving : t.common.create}
               </button>
             </div>
           </form>

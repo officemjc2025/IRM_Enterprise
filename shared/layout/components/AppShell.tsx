@@ -7,6 +7,7 @@ import { ResponsiveDrawer } from "./ResponsiveDrawer";
 import { PageContainer } from "./PageContainer";
 import { usePathname } from "next/navigation";
 import { AuthContext } from "@/providers/AuthProvider";
+import { useLanguage } from "@/providers/LanguageProvider";
 import { Permissions } from "@/shared/auth/permissions";
 import { hasPermission } from "@/shared/auth/guard";
 import { ErrorState } from "./ErrorState";
@@ -16,6 +17,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
   const auth = useContext(AuthContext);
+  const { t } = useLanguage();
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -96,8 +98,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               children
             ) : (
               <ErrorState
-                title="403 Access Denied"
-                message="You do not have the required permissions to access this module."
+                title={t.common.accessDenied}
+                message={t.common.accessDeniedMessage}
               />
             )}
           </PageContainer>
