@@ -151,3 +151,15 @@ Every AI implementation prompt must include:
 - Definition of Done
 
 AI must never modify files outside the declared scope unless explicitly approved.
+
+---
+
+# DECISION-011 — Identity & Profile Architecture
+
+To support scalability and maintain clear separation of concerns in line with Clean Architecture:
+
+1. **Database Layer (Trigger)**: The Profile lifecycle is owned by the Database Trigger. Performs automatic profile creation on `auth.users` insert. This ensures database integrity and automatic provisioning of profiles regardless of client runtime. Neither Repository nor Service may create default Profiles automatically.
+2. **Repository Layer (Data Only)**: Responsible only for direct select, insert, update, and delete actions. It must not contain business rules, onboarding logic, default objects, or fallback flows.
+3. **Service Layer (Business Logic)**: Manages business decisions and processes. If the repository reports no profile exists, the service layer logs a `DataIntegrityError` and returns `null` (allowing the application to handle onboarding explicitly).
+
+This prevents duplicate onboarding logic, isolates database interactions, and ensures the application remains robust under all auth scenarios.

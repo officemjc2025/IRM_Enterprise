@@ -11,7 +11,17 @@ export async function getProfile(id: string): Promise<Profile | null> {
     .single();
 
   if (error) {
-    console.error("Error fetching profile:", error);
+    if (error.code === "PGRST116") {
+      // Profile does not exist. Return null without error logging.
+      return null;
+    }
+
+    console.error("Error fetching profile:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
     return null;
   }
 
@@ -29,7 +39,12 @@ export async function updateProfile(id: string, updates: Partial<Profile>): Prom
     .single();
 
   if (error) {
-    console.error("Error updating profile:", error);
+    console.error("Error updating profile:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
     return null;
   }
 
@@ -46,7 +61,12 @@ export async function createProfile(profile: Omit<Profile, "created_at" | "updat
     .single();
 
   if (error) {
-    console.error("Error creating profile:", error);
+    console.error("Error creating profile:", {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+    });
     return null;
   }
 
