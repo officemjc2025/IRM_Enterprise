@@ -1,22 +1,23 @@
 import { createBrowserClient } from "@supabase/ssr";
-import { SupabaseClient } from "@supabase/supabase-js";
 
-let supabaseClient: SupabaseClient | null = null;
+
 
 export const createClient = () => {
-  if (typeof window === "undefined") {
-    return createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+  const client = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  if (typeof window !== "undefined") {
+    const originalOnAuthStateChange = client.auth.onAuthStateChange.bind(client.auth);
+    client.auth.onAuthStateChange = (callback) => {
+      return originalOnAuthStateChange((event, session) => {
+        setTimeout(() => {
+          callback(event, session);
+        }, 0);
+      });
+    };
   }
 
-  if (!supabaseClient) {
-    supabaseClient = createBrowserClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-  }
-
-  return supabaseClient;
+  return client;
 };
