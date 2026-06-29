@@ -4,6 +4,7 @@ import React, { use, useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useRouter } from "next/navigation";
 import { Unit } from "../types/unit.types";
+import { Occupancy } from "@/features/occupancy/types/occupancy.types";
 
 interface ViewUnitProps {
   params: Promise<{ id: string }>;
@@ -13,12 +14,16 @@ export default function ViewUnitPage({ params }: ViewUnitProps) {
   const router = useRouter();
   const { id } = use(params);
   const [unit, setUnit] = useState<Unit | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [occupancies, setOccupancies] = useState<Occupancy[]>([]);
+  
+  const [loadingUnit, setLoadingUnit] = useState(true);
+  const [loadingOccs, setLoadingOccs] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const fetchUnit = async () => {
       try {
+        setLoadingUnit(true);
         const res = await fetch(`/api/v1/units/${id}`);
         const json = await res.json();
         if (json.success) {
@@ -30,79 +35,139 @@ export default function ViewUnitPage({ params }: ViewUnitProps) {
         const message = err instanceof Error ? err.message : "Failed to load unit";
         setError(message);
       } finally {
-        setLoading(false);
+        setLoadingUnit(false);
       }
     };
-    fetchUnit();
+
+    const fetchOccupancies = async () => {
+      try {
+        setLoadingOccs(true);
+        const res = await fetch(`/api/v1/units/${id}/occupancies`);
+        const json = await res.json();
+        if (json.success) {
+          setOccupancies(json.data);
+        }
+      } catch (err) {
+        console.error("Failed to load occupancies:", err);
+      } finally {
+        setLoadingOccs(false);
+      }
+    };
+
+    queueMicrotask(() => {
+      fetchUnit();
+      fetchOccupancies();
+    });
   }, [id]);
 
   return (
     <MainLayout>
-      <div className="max-w-xl mx-auto space-y-6">
+      <div className="max-w-2xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Unit Details</h2>
+          <h2 className="text-xl font-bold">Unit Details (Read-only)</h2>
           <button
             onClick={() => router.push("/units")}
-            className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm"
+            className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm transition"
           >
-            Back to List
+            Back to Directory
           </button>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg p-6 shadow-sm space-y-4">
-          {loading ? (
-            <div className="text-center text-slate-500">Loading...</div>
-          ) : error ? (
-            <div className="p-3 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded-lg text-sm">
-              {error}
-            </div>
-          ) : (
-            unit && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2">
-                  <span className="font-semibold text-slate-500 text-sm">Unit Number</span>
-                  <span className="col-span-2 font-mono text-sm font-semibold">{unit.unit_number}</span>
-                </div>
-                <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2">
-                  <span className="font-semibold text-slate-500 text-sm">Building Code</span>
-                  <span className="col-span-2 text-sm">{unit.building_code || "-"}</span>
-                </div>
-                <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2">
-                  <span className="font-semibold text-slate-500 text-sm">Floor</span>
-                  <span className="col-span-2 text-sm">{unit.floor}</span>
-                </div>
-                <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2">
-                  <span className="font-semibold text-slate-500 text-sm">Area</span>
-                  <span className="col-span-2 text-sm">{unit.area} sqm</span>
-                </div>
-                <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2">
-                  <span className="font-semibold text-slate-500 text-sm">Ownership Ratio</span>
-                  <span className="col-span-2 text-sm">{(unit.ownership_ratio * 100).toFixed(4)}%</span>
-                </div>
-                <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2">
-                  <span className="font-semibold text-slate-500 text-sm">Status</span>
-                  <span className="col-span-2">
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                        unit.status === "active"
-                          ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                          : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                      }`}
-                    >
-                      {unit.status}
+        {error ? (
+          <div className="p-3 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded-lg text-sm">
+            {error}
+          </div>
+        ) : loadingUnit ? (
+          <div className="p-12 text-center text-slate-500">Loading details...</div>
+        ) : (
+          unit && (
+            <div className="space-y-6">
+              {/* Unit Info Card */}
+              <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg p-6 shadow-sm space-y-4">
+                <h3 className="text-base font-semibold border-b border-slate-100 dark:border-slate-700 pb-2">
+                  Unit Information
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Unit Number</span>
+                    <span className="text-sm font-semibold font-mono text-slate-800 dark:text-slate-200">{unit.unit_number}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Building Code</span>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{unit.building_code || "-"}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Floor</span>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{unit.floor}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Area (sqm)</span>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{unit.area} sqm</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Ownership Ratio</span>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{(unit.ownership_ratio * 100).toFixed(4)}%</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Status</span>
+                    <span className="block mt-0.5">
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                          unit.status === "active"
+                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                        }`}
+                      >
+                        {unit.status}
+                      </span>
                     </span>
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2">
-                  <span className="font-semibold text-slate-500 text-sm">Created At</span>
-                  <span className="col-span-2 text-xs font-mono text-slate-400">
-                    {new Date(unit.created_at).toLocaleString()}
-                  </span>
+                  </div>
                 </div>
               </div>
-            )
-          )}
-        </div>
+
+              {/* Occupancy and Assigned Persons */}
+              <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg p-6 shadow-sm space-y-4">
+                <h3 className="text-base font-semibold border-b border-slate-100 dark:border-slate-700 pb-2">
+                  Current Occupancy & Assigned Persons
+                </h3>
+                {loadingOccs ? (
+                  <div className="text-center text-xs text-slate-500 py-4">Loading occupancies...</div>
+                ) : occupancies.length === 0 ? (
+                  <div className="text-center text-xs text-slate-500 py-6">No occupants registered in this unit.</div>
+                ) : (
+                  <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                    {occupancies.map((o) => (
+                      <div key={o.id} className="py-3 flex justify-between items-center text-sm">
+                        <div>
+                          <div className="font-semibold text-slate-800 dark:text-slate-200">
+                            {o.person ? `${o.person.first_name} ${o.person.last_name || ""}` : "Unknown"}
+                          </div>
+                          <div className="text-xs text-slate-400 mt-1">
+                            Period: {o.start_date} to {o.end_date || "Present"}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-700 text-slate-500 uppercase">
+                            {o.occupancy_type}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                              o.status === "active"
+                                ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                                : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                            }`}
+                          >
+                            {o.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        )}
       </div>
     </MainLayout>
   );
