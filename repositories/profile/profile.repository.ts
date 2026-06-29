@@ -16,7 +16,7 @@ export async function getProfile(id: string): Promise<Profile | null> {
       return null;
     }
 
-    console.error("Error fetching profile:", {
+    console.error("[ProfileRepository] Failed to fetch profile", {
       code: error.code,
       message: error.message,
       details: error.details,
