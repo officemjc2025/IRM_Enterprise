@@ -4,10 +4,16 @@ import React, { useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import Link from "next/link";
 import { Property } from "@/features/property/types/property.types";
+import { useLanguage } from "@/providers/LanguageProvider";
+import { useDebounce } from "@/features/property/hooks";
+import { PageHeader, SearchInput, EmptyState, LoadingState } from "@/shared/ui";
 
 export default function PropertyListPage() {
+  const { language } = useLanguage();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const fetchProperties = async () => {
     try {
@@ -42,24 +48,36 @@ export default function PropertyListPage() {
     }
   };
 
+  const filteredProperties = properties.filter((p) => {
+    const term = debouncedSearchTerm.toLowerCase().trim();
+    if (!term) return true;
+    return (
+      p.code.toLowerCase().includes(term) ||
+      p.name_th.toLowerCase().includes(term) ||
+      (p.name_en && p.name_en.toLowerCase().includes(term))
+    );
+  });
+
   return (
     <MainLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Properties</h2>
-          <Link
-            href="/properties/create"
-            className="px-4 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-medium"
-          >
-            Create Property
-          </Link>
-        </div>
+        <PageHeader
+          title="Properties"
+          actionHref="/properties/create"
+          actionLabel="Create Property"
+        />
+
+        <SearchInput
+          placeholder={language === "en" ? "Search by name or code..." : "ค้นหาด้วยชื่อหรือรหัส..."}
+          value={searchTerm}
+          onChange={setSearchTerm}
+        />
 
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden">
           {loading ? (
-            <div className="p-6 text-center text-slate-500">Loading...</div>
-          ) : properties.length === 0 ? (
-            <div className="p-6 text-center text-slate-500">No properties found.</div>
+            <LoadingState />
+          ) : filteredProperties.length === 0 ? (
+            <EmptyState message="No properties found." />
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
@@ -72,7 +90,7 @@ export default function PropertyListPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
-                {properties.map((p) => (
+                {filteredProperties.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <td className="p-4 font-mono font-medium">{p.code}</td>
                     <td className="p-4">{p.name_th}</td>

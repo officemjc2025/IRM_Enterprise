@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useRouter } from "next/navigation";
 import { Status } from "@/shared/enums/status";
+import { PageHeader } from "@/shared/ui";
 
 export default function CreatePropertyPage() {
   const router = useRouter();
@@ -42,9 +43,7 @@ export default function CreatePropertyPage() {
   return (
     <MainLayout>
       <div className="max-w-xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Create Property</h2>
-        </div>
+        <PageHeader title="Create Property" />
 
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg p-6 shadow-sm">
           <form onSubmit={handleSubmit} className="space-y-4">

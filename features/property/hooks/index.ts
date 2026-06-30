@@ -1,2 +1,1 @@
-// Export property hooks here when implemented.
-export {};
+export * from "./useDebounce";
