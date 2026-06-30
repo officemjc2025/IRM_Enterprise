@@ -1,14 +1,14 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import Link from "next/link";
 import { Property } from "@/features/property/types/property.types";
 import { useLanguage } from "@/providers/LanguageProvider";
-import { useDebounce } from "@/features/property/hooks";
+import { useDebounce, usePagination } from "@/features/property/hooks";
 import { PageHeader, SearchInput, EmptyState, LoadingState } from "@/shared/ui";
 
-export default function PropertyListPage() {
+function PropertyListInner() {
   const { language } = useLanguage();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,6 +58,24 @@ export default function PropertyListPage() {
     );
   });
 
+  const {
+    currentPage,
+    pageSize,
+    totalPages,
+    startIndex,
+    endIndex,
+    
+    setPageSize,
+    nextPage,
+    prevPage,
+    firstPage,
+    lastPage,
+  } = usePagination(filteredProperties.length);
+
+  const sliceStart = (currentPage - 1) * pageSize;
+  const sliceEnd = sliceStart + pageSize;
+  const paginatedProperties = filteredProperties.slice(sliceStart, sliceEnd);
+
   return (
     <MainLayout>
       <div className="space-y-6">
@@ -76,7 +94,7 @@ export default function PropertyListPage() {
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden">
           {loading ? (
             <LoadingState />
-          ) : filteredProperties.length === 0 ? (
+          ) : paginatedProperties.length === 0 ? (
             <EmptyState message="No properties found." />
           ) : (
             <table className="w-full text-left border-collapse">
@@ -90,7 +108,7 @@ export default function PropertyListPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
-                {filteredProperties.map((p) => (
+                {paginatedProperties.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <td className="p-4 font-mono font-medium">{p.code}</td>
                     <td className="p-4">{p.name_th}</td>
@@ -122,7 +140,70 @@ export default function PropertyListPage() {
             </table>
           )}
         </div>
+
+        {/* Pagination Controls */}
+        {!loading && filteredProperties.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg p-4 shadow-sm text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500">Show:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
+                className="p-1 border border-slate-200 dark:border-slate-700 rounded dark:bg-slate-900 outline-none cursor-pointer"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+              </select>
+              <span className="text-slate-500 ml-2">
+                Showing {startIndex}–{endIndex} of {filteredProperties.length} properties
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={firstPage}
+                disabled={currentPage === 1}
+                className="px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition"
+              >
+                First
+              </button>
+              <button
+                onClick={prevPage}
+                disabled={currentPage === 1}
+                className="px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition"
+              >
+                Previous
+              </button>
+              <span className="px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-semibold text-slate-800 dark:text-slate-200">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                onClick={nextPage}
+                disabled={currentPage === totalPages}
+                className="px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition"
+              >
+                Next
+              </button>
+              <button
+                onClick={lastPage}
+                disabled={currentPage === totalPages}
+                className="px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition"
+              >
+                Last
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </MainLayout>
+  );
+}
+
+export default function PropertyListPage() {
+  return (
+    <Suspense fallback={<MainLayout><div className="p-6 text-center text-slate-500">Loading pagination context...</div></MainLayout>}>
+      <PropertyListInner />
+    </Suspense>
   );
 }
