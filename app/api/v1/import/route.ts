@@ -7,6 +7,8 @@ import { Person, UpdatePersonDto } from "@/features/person/types/person.types";
 import { Status } from "@/shared/enums/status";
 import { ownerService } from "@/services/owner/owner.service";
 import { Owner, UpdateOwnerDto as UpdateOwnerTypeDto } from "@/features/owner/types/owner.types";
+import { occupancyService } from "@/services/occupancy/occupancy.service";
+import { Occupancy, UpdateOccupancyDto, OccupancyType } from "@/features/occupancy/types/occupancy.types";
 
 export async function POST(request: Request) {
   console.log("Import Started");
@@ -483,6 +485,164 @@ export async function POST(request: Request) {
         // 2. Restore all updated records to their original states
         for (const updateInfo of updatedOwners) {
           await ownerService.updateOwner(updateInfo.id, updateInfo.original);
+        }
+
+        console.log("Import Failed");
+        const elapsed = Date.now() - startTime;
+        return NextResponse.json({
+          success: false,
+          message: "Import failed. No data has been saved.",
+          summary: {
+            inserted: 0,
+            updated: 0,
+            skipped: 0,
+            errors: payload.length,
+            elapsedTime: (elapsed / 1000).toFixed(2) + "s",
+          },
+        });
+      }
+
+      console.log("Import Finished");
+      const elapsed = Date.now() - startTime;
+      return NextResponse.json({
+        success: true,
+        message: "✔ Import completed successfully",
+        summary: {
+          inserted: insertedCount,
+          updated: updatedCount,
+          skipped: skippedCount,
+          errors: 0,
+          elapsedTime: (elapsed / 1000).toFixed(2) + "s",
+        },
+      });
+    }
+
+    if (moduleName === "occupancy") {
+      // 1. Business Validation (all-or-nothing check before any DB write)
+      for (const item of payload) {
+        if (!item.unit_id || String(item.unit_id).trim() === "") {
+          throw new Error("Unit ID is required and cannot be blank.");
+        }
+        if (!item.person_id || String(item.person_id).trim() === "") {
+          throw new Error("Person ID is required and cannot be blank.");
+        }
+        if (!item.occupancy_type || String(item.occupancy_type).trim() === "") {
+          throw new Error("Occupancy type is required and cannot be blank.");
+        }
+        if (!item.move_in_date || String(item.move_in_date).trim() === "") {
+          throw new Error("Move-in date is required and cannot be blank.");
+        }
+        const itemStatus = String(item.status || "ACTIVE").toUpperCase();
+        if (!["ACTIVE", "INACTIVE"].includes(itemStatus)) {
+          throw new Error(`Status '${itemStatus}' is invalid. Allowed values: ACTIVE, INACTIVE.`);
+        }
+      }
+
+      // 2. Fetch existing occupancies to perform Upsert Strategy (identify update vs insert)
+      const existingOccupancies = await occupancyService.getOccupancies();
+      const existingOccupancyMap = new Map<string, Occupancy>(); // "unit_id:person_id" -> Occupancy (active only)
+      existingOccupancies.forEach((occ) => {
+        if (occ.unit_id && occ.person_id && occ.status === "ACTIVE") {
+          existingOccupancyMap.set(`${occ.unit_id}:${occ.person_id}`, occ);
+        }
+      });
+
+      // Track created IDs and updated original details for transaction rollback
+      const createdIds: string[] = [];
+      const updatedOccupancies: { id: string; original: UpdateOccupancyDto }[] = [];
+
+      let insertedCount = 0;
+      let updatedCount = 0;
+      let skippedCount = 0;
+
+      try {
+        for (const item of payload) {
+          const key = `${item.unit_id}:${item.person_id}`;
+          const existing = existingOccupancyMap.get(key);
+
+          const typeVal = String(item.occupancy_type).toUpperCase() as OccupancyType;
+          const startDateVal = String(item.move_in_date).trim();
+          const endDateVal = item.move_out_date ? String(item.move_out_date).trim() : null;
+          const remarkVal = item.remark ? String(item.remark).trim() : null;
+          const statusVal = (item.status || "ACTIVE").toUpperCase() as Status;
+
+          if (existing) {
+            // Check if any attributes have actually changed to determine whether to update or skip
+            const hasChanged =
+              existing.occupancy_type !== typeVal ||
+              existing.start_date !== startDateVal ||
+              (existing.end_date || "") !== (endDateVal || "") ||
+              (existing.remarks || "") !== (remarkVal || "") ||
+              existing.status !== statusVal;
+
+            if (hasChanged) {
+              updatedOccupancies.push({
+                id: existing.id,
+                original: {
+                  unit_id: existing.unit_id,
+                  person_id: existing.person_id,
+                  occupancy_type: existing.occupancy_type,
+                  start_date: existing.start_date,
+                  end_date: existing.end_date,
+                  remarks: existing.remarks,
+                  status: existing.status,
+                },
+              });
+
+              const updated = await occupancyService.updateOccupancy(existing.id, {
+                unit_id: String(item.unit_id),
+                person_id: String(item.person_id),
+                occupancy_type: typeVal,
+                start_date: startDateVal,
+                end_date: endDateVal,
+                remarks: remarkVal,
+                status: statusVal,
+              });
+
+              if (!updated) {
+                throw new Error(`Failed to update existing occupancy: ${item.unit_number}`);
+              }
+              updatedCount++;
+            } else {
+              skippedCount++;
+            }
+          } else {
+            // Create new occupancy using the Service layer
+            const created = await occupancyService.createOccupancy({
+              unit_id: String(item.unit_id),
+              person_id: String(item.person_id),
+              occupancy_type: typeVal,
+              start_date: startDateVal,
+              end_date: endDateVal,
+              remarks: remarkVal,
+              status: statusVal,
+            });
+
+            if (!created?.id) {
+              throw new Error(`Failed to create occupancy: ${item.unit_number}`);
+            }
+            createdIds.push(created.id);
+            insertedCount++;
+          }
+        }
+      } catch (dbErr: unknown) {
+        console.error("Database commit error, performing rollback:", dbErr);
+
+        // Perform Transaction Rollback
+        // 1. Delete all inserted records in this batch
+        if (createdIds.length > 0) {
+          const { error: delError } = await supabase
+            .from("occupancies")
+            .delete()
+            .in("id", createdIds);
+          if (delError) {
+            console.error("Rollback failed to delete created occupancies:", delError);
+          }
+        }
+
+        // 2. Restore all updated records to their original states
+        for (const updateInfo of updatedOccupancies) {
+          await occupancyService.updateOccupancy(updateInfo.id, updateInfo.original);
         }
 
         console.log("Import Failed");

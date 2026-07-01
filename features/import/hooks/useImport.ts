@@ -131,7 +131,7 @@ export function useImport() {
       setError("fileRequired");
       return;
     }
-    if (selectedModule === "unit" && !selectedPropertyId) {
+    if ((selectedModule === "unit" || selectedModule === "occupancy") && !selectedPropertyId) {
       setError("propertyRequired");
       return;
     }
@@ -157,7 +157,7 @@ export function useImport() {
           parsed.rows,
           mapping,
           schema,
-          selectedModule === "unit" ? selectedPropertyId : undefined
+          (selectedModule === "unit" || selectedModule === "occupancy") ? selectedPropertyId : undefined
         );
         setRowValidation(validated);
       }
@@ -220,6 +220,7 @@ export function useImport() {
           let apiPath = "/api/v1/units";
           if (selectedModule === "person") apiPath = "/api/v1/persons";
           else if (selectedModule === "owner") apiPath = "/api/v1/owners";
+          else if (selectedModule === "occupancy") apiPath = "/api/v1/occupancies";
           await fetch(apiPath, { cache: "no-store" });
         } catch (fetchErr) {
           console.error(`Failed to refresh ${selectedModule} cache:`, fetchErr);
@@ -231,6 +232,7 @@ export function useImport() {
           let targetPath = "/units";
           if (selectedModule === "person") targetPath = "/persons";
           else if (selectedModule === "owner") targetPath = "/owners";
+          else if (selectedModule === "occupancy") targetPath = "/occupancies";
           router.push(targetPath);
         }, 4000);
       } else {

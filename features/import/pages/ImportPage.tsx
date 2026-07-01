@@ -175,7 +175,7 @@ export default function ImportPage() {
                 </select>
               </div>
 
-              {selectedModule === "unit" && (
+              {(selectedModule === "unit" || selectedModule === "occupancy") && (
                 <div className="flex items-center gap-2">
                   <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">
                     {language === "en" ? "Property" : "โครงการ"}

@@ -181,9 +181,29 @@ export const importService = {
       }
     }
 
+    const isOccupancyModule = schema.moduleName === "occupancy";
+
+    // Query active occupancies in DB to check for duplicate active occupancy
+    const dbActiveOccupancies = new Set<string>(); // "unit_id:person_id"
+    if (isOccupancyModule) {
+      const supabase = createClient();
+      const { data: activeOccData } = await supabase
+        .from("occupancy")
+        .select("unit_id, person_id")
+        .eq("status", "ACTIVE")
+        .is("deleted_at", null);
+
+      if (activeOccData) {
+        activeOccData.forEach((o) => {
+          dbActiveOccupancies.add(`${o.unit_id}:${o.person_id}`);
+        });
+      }
+    }
+
     const unitNumberTracker: Record<string, number[]> = {};
     const personCodeTracker: Record<string, number[]> = {};
     const ownerCodeTracker: Record<string, number[]> = {};
+    const excelActiveOccupancies = new Set<string>(); // "unit_id:person_id" inside Excel
 
     rows.forEach((row, index) => {
       const rowNumber = index + 2;
@@ -336,6 +356,108 @@ export const importService = {
             message: `Owner code '${code}' already exists in database (will be updated)`,
             severity: "warning",
           });
+        }
+      }
+
+      // Occupancy Module specific relationship resolution and validations
+      if (isOccupancyModule) {
+        let matchedUnitId = "";
+        let matchedPersonId = "";
+
+        const unitNum = String(normalizedData.unit_number || "").toUpperCase().trim();
+        const propId = String(normalizedData.property_id || selectedPropertyId || "");
+        const unitKey = `${propId}:${unitNum}`;
+        const unitHeaderName = reverseMapping.unit_number || "unit_number";
+
+        if (!unitNum) {
+          errors.push({
+            rowNumber,
+            column: unitHeaderName,
+            message: "Unit number is required",
+            severity: "error",
+          });
+        } else {
+          const foundId = dbUnitsMap.get(unitKey);
+          if (!foundId) {
+            errors.push({
+              rowNumber,
+              column: unitHeaderName,
+              message: `Unit '${unitNum}' not found in database for selected property`,
+              severity: "error",
+            });
+          } else {
+            matchedUnitId = foundId;
+            normalizedData.unit_id = foundId;
+          }
+        }
+
+        const personCode = String(normalizedData.person_code || "").toUpperCase().trim();
+        const personHeaderName = reverseMapping.person_code || "person_code";
+
+        if (!personCode) {
+          errors.push({
+            rowNumber,
+            column: personHeaderName,
+            message: "Person code is required",
+            severity: "error",
+          });
+        } else {
+          const foundId = dbPersonsMap.get(personCode);
+          if (!foundId) {
+            errors.push({
+              rowNumber,
+              column: personHeaderName,
+              message: `Person code '${personCode}' not found in database`,
+              severity: "error",
+            });
+          } else {
+            matchedPersonId = foundId;
+            normalizedData.person_id = foundId;
+          }
+        }
+
+        // Date relationship validations
+        if (normalizedData.move_in_date && normalizedData.move_out_date) {
+          const inDate = Date.parse(String(normalizedData.move_in_date));
+          const outDate = Date.parse(String(normalizedData.move_out_date));
+          if (!isNaN(inDate) && !isNaN(outDate) && outDate < inDate) {
+            errors.push({
+              rowNumber,
+              column: reverseMapping.move_out_date || "move_out_date",
+              message: "Move-out date cannot be before move-in date",
+              severity: "error",
+            });
+          }
+        }
+
+        // Duplicate active occupancy check (DB & Excel)
+        if (matchedUnitId && matchedPersonId) {
+          const statusVal = String(normalizedData.status || "ACTIVE").toUpperCase();
+          if (statusVal === "ACTIVE") {
+            const occKey = `${matchedUnitId}:${matchedPersonId}`;
+
+            // Check database duplicate active occupancy
+            if (dbActiveOccupancies.has(occKey)) {
+              errors.push({
+                rowNumber,
+                column: unitHeaderName,
+                message: `Duplicate active occupancy for unit '${unitNum}' and person '${personCode}' already exists in database (will be updated)`,
+                severity: "warning", // The task states: "If an ACTIVE occupancy already exists... UPDATE. Otherwise... INSERT." So it will be updated in the DB, meaning a warning is more correct than a blocking error since the Commit Engine can merge/upsert it!
+              });
+            }
+
+            // Check Excel duplicate active occupancy
+            if (excelActiveOccupancies.has(occKey)) {
+              errors.push({
+                rowNumber,
+                column: unitHeaderName,
+                message: `Duplicate active occupancy for unit '${unitNum}' and person '${personCode}' detected in rows within the Excel sheet`,
+                severity: "error", // Multiple active occupancies for same person & unit in same Excel sheet is an error.
+              });
+            } else {
+              excelActiveOccupancies.add(occKey);
+            }
+          }
         }
       }
 

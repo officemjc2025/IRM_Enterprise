@@ -35,6 +35,9 @@ export type CanonicalField =
   | "person_code"
   | "person_type"
   | "occupancy_type"
+  | "move_in_date"
+  | "move_out_date"
+  | "primary_resident"
   | "status";
 
 export const CANONICAL_FIELDS: CanonicalField[] = [
@@ -58,6 +61,9 @@ export const CANONICAL_FIELDS: CanonicalField[] = [
   "person_code",
   "person_type",
   "occupancy_type",
+  "move_in_date",
+  "move_out_date",
+  "primary_resident",
   "status",
 ];
 
