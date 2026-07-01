@@ -17,7 +17,7 @@ export default function CreateOwnershipPage() {
   const [unitId, setUnitId] = useState("");
   const [ownershipPercentage, setOwnershipPercentage] = useState<number>(100);
   const [ownershipType, setOwnershipType] = useState("OWNER");
-  const [startDate, setStartDate] = useState("");
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [endDate, setEndDate] = useState("");
   const [status, setStatus] = useState<Status>(Status.ACTIVE);
   
@@ -52,7 +52,6 @@ export default function CreateOwnershipPage() {
       }
     };
 
-    setStartDate(new Date().toISOString().split("T")[0]);
     fetchLookups();
   }, []);
 

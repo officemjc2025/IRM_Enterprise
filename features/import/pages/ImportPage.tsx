@@ -5,7 +5,7 @@ import MainLayout from "@/components/layout/MainLayout";
 import { useImport, MAX_FILE_SIZE_MB } from "../hooks/useImport";
 import UploadZone from "../components/UploadZone";
 import { useLanguage } from "@/providers/LanguageProvider";
-import { ColumnMapping, CanonicalField } from "../types/import.types";
+import { CanonicalField } from "../types/import.types";
 import { getSchema } from "../schemas";
 import { useRouter } from "next/navigation";
 
@@ -81,8 +81,8 @@ export default function ImportPage() {
     }
   };
 
-  const handleMappingChange = (header: string, canonicalField: string) => {
-    const updatedMapping = { ...columnMapping, [header]: canonicalField as any };
+  const handleMappingChange = (header: string, canonicalField: CanonicalField | "") => {
+    const updatedMapping = { ...columnMapping, [header]: canonicalField };
     updateMappingAndRevalidate(updatedMapping);
   };
 
@@ -90,7 +90,7 @@ export default function ImportPage() {
   const getMappingValidation = () => {
     const errors: string[] = [];
     const mappedFields = Object.entries(columnMapping)
-      .map(([_, field]) => field)
+      .map(([, field]) => field)
       .filter((f): f is CanonicalField => f !== "");
 
     // 1. Required Field Detection from current schema
@@ -109,7 +109,7 @@ export default function ImportPage() {
       fieldCounts[field] = (fieldCounts[field] || 0) + 1;
     });
     const duplicates = Object.entries(fieldCounts)
-      .filter(([_, count]) => count > 1)
+      .filter(([, count]) => count > 1)
       .map(([field]) => field);
     
     if (duplicates.length > 0) {
@@ -485,7 +485,7 @@ export default function ImportPage() {
                       <div className="flex flex-col items-end">
                         <select
                           value={targetField}
-                          onChange={(e) => handleMappingChange(header, e.target.value)}
+                          onChange={(e) => handleMappingChange(header, e.target.value as CanonicalField | "")}
                           className={`text-xs p-1.5 border rounded bg-white dark:bg-slate-800 outline-none w-48 font-semibold cursor-pointer ${
                             isRequired
                               ? "border-green-500 text-green-700 dark:text-green-400"

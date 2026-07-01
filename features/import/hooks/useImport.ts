@@ -8,6 +8,12 @@ import { parseFile } from "../utils/excelParser";
 import { importService } from "@/services/import/import.service";
 import { getSchema } from "../schemas";
 import { createClient } from "@/lib/supabase/client";
+export interface TargetProperty {
+  id: string;
+  property_code: string | null;
+  property_name_th: string;
+  property_name_en: string | null;
+}
 
 // Configurable Max File Size (10MB by default)
 export const MAX_FILE_SIZE_MB = 10;
@@ -29,7 +35,7 @@ export interface ImportResponse {
 
 export function useImport() {
   const [selectedModule, setSelectedModule] = useState<string>("unit");
-  const [properties, setProperties] = useState<any[]>([]);
+  const [properties, setProperties] = useState<TargetProperty[]>([]);
   const [selectedPropertyId, setSelectedPropertyId] = useState<string>("");
   const [file, setFile] = useState<ImportFile | null>(null);
   const [step, setStep] = useState<number>(1); // 1: Upload, 2: Validate, 3: Preview, 4: Ready (Summary)
@@ -224,9 +230,10 @@ export function useImport() {
       } else {
         setError(res.message || "Import failed. No data has been saved.");
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Import execution failed:", err);
-      setError(err.message || "Import failed. No data has been saved.");
+      const errMsg = err instanceof Error ? err.message : "Import failed. No data has been saved.";
+      setError(errMsg);
     } finally {
       setIsImporting(false);
       setImportProgress(null);

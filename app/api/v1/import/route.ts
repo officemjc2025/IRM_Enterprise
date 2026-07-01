@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import * as unitRepository from "@/repositories/unit/unit.repository";
 import { unitService } from "@/services/unit/unit.service";
+import { Unit, UpdateUnitDto } from "@/features/unit/types/unit.types";
 
 export async function POST(request: Request) {
   console.log("Import Started");
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
 
       // 2. Fetch existing units to perform Upsert Strategy (identify update vs insert)
       const existingUnits = await unitService.getUnits();
-      const existingUnitsMap = new Map<string, any>(); // "property_id:unit_number" -> Unit
+      const existingUnitsMap = new Map<string, Unit>(); // "property_id:unit_number" -> Unit
       existingUnits.forEach((u) => {
         if (u.property_id && u.unit_number) {
           existingUnitsMap.set(`${u.property_id}:${u.unit_number.trim().toUpperCase()}`, u);
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
       // Track created IDs and updated original details for transaction rollback
       const createdIds: string[] = [];
-      const updatedUnits: { id: string; original: any }[] = [];
+      const updatedUnits: { id: string; original: UpdateUnitDto & { property_id: string } }[] = [];
 
       let insertedCount = 0;
       let updatedCount = 0;
@@ -134,7 +134,7 @@ export async function POST(request: Request) {
             insertedCount++;
           }
         }
-      } catch (dbErr: any) {
+      } catch (dbErr: unknown) {
         console.error("Database commit error, performing rollback:", dbErr);
 
         // Perform Transaction Rollback

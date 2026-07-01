@@ -73,8 +73,8 @@ function PersonListInner() {
 
   // 3. Sort Step
   const sortedPeople = [...filteredPeople].sort((a, b) => {
-    let valA = a[sortBy as keyof Person] ?? "";
-    let valB = b[sortBy as keyof Person] ?? "";
+    const valA = a[sortBy as keyof Person] ?? "";
+    const valB = b[sortBy as keyof Person] ?? "";
 
     if (sortBy === "first_name" || sortBy === "fullName") {
       const nameA = `${a.first_name} ${a.last_name}`.toLowerCase();

@@ -2,6 +2,8 @@ import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { Ownership, CreateOwnershipDto, UpdateOwnershipDto } from "@/features/ownership/types/ownership.types";
 import { Status } from "@/shared/enums/status";
+import { Person } from "@/features/person/types/person.types";
+import { Unit } from "@/features/unit/types/unit.types";
 
 async function getSupabase() {
   if (typeof window === "undefined") {
@@ -21,8 +23,8 @@ interface OwnershipDbRow {
   status: string | null;
   created_at: string;
   updated_at: string;
-  person?: any;
-  unit?: any;
+  person?: Partial<Person> | null;
+  unit?: Partial<Unit> | null;
 }
 
 function mapToOwnership(row: OwnershipDbRow): Ownership {
@@ -40,11 +42,11 @@ function mapToOwnership(row: OwnershipDbRow): Ownership {
     person: row.person ? {
       ...row.person,
       status: (row.person.status || "ACTIVE").toUpperCase() as Status,
-    } : null,
+    } as Person : null,
     unit: row.unit ? {
       ...row.unit,
       status: (row.unit.status || "ACTIVE").toUpperCase() as Status,
-    } : null,
+    } as Unit : null,
   };
 }
 

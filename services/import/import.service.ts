@@ -124,7 +124,7 @@ export const importService = {
     const isUnitNumberMapped = Object.values(mapping).includes("unit_number");
 
     // Query existing units in DB to check for database duplicate unit number
-    let dbUnitsMap = new Map<string, string>(); // "property_id:unit_number" -> id
+    const dbUnitsMap = new Map<string, string>(); // "property_id:unit_number" -> id
     if (isUnitNumberMapped) {
       const supabase = createClient();
       const { data: dbUnits } = await supabase

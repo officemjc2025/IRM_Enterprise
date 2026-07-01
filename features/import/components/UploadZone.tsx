@@ -13,7 +13,7 @@ interface UploadZoneProps {
 export default function UploadZone({ onFileSelected, loading, onError }: UploadZoneProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragActive, setIsDragActive] = useState(false);
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
 
   const processFile = (file: File) => {
     const extension = file.name.split(".").pop()?.toLowerCase();

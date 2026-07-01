@@ -79,8 +79,8 @@ function OwnershipListInner() {
 
   // 3. Sort Step
   const sortedOwnerships = [...filteredOwnerships].sort((a, b) => {
-    let valA: any = "";
-    let valB: any = "";
+    let valA: unknown = "";
+    let valB: unknown = "";
 
     if (sortBy === "unit_id") {
       valA = a.unit?.unit_number || "";
