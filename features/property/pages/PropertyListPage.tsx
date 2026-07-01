@@ -5,7 +5,7 @@ import MainLayout from "@/components/layout/MainLayout";
 import Link from "next/link";
 import { Property } from "@/features/property/types/property.types";
 import { useLanguage } from "@/providers/LanguageProvider";
-import { useDebounce, usePagination, useSorting } from "@/features/property/hooks";
+import { useDebounce, usePagination, useSorting, useFilter } from "@/features/property/hooks";
 import { PageHeader, SearchInput, EmptyState, LoadingState } from "@/shared/ui";
 
 function PropertyListInner() {
@@ -16,6 +16,7 @@ function PropertyListInner() {
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const { sortBy, sortOrder, setSorting } = useSorting("code", "asc");
+  const { status, setFilter } = useFilter("all");
 
   const fetchProperties = async () => {
     try {
@@ -51,7 +52,7 @@ function PropertyListInner() {
   };
 
   // 1. Search Filter Step
-  const filteredProperties = properties.filter((p) => {
+  const searchedProperties = properties.filter((p) => {
     const term = debouncedSearchTerm.toLowerCase().trim();
     if (!term) return true;
     return (
@@ -61,7 +62,13 @@ function PropertyListInner() {
     );
   });
 
-  // 2. Sort Step
+  // 2. Status Filter Step
+  const filteredProperties = searchedProperties.filter((p) => {
+    if (status === "all") return true;
+    return p.status.toLowerCase() === status.toLowerCase();
+  });
+
+  // 3. Sort Step
   const sortedProperties = [...filteredProperties].sort((a, b) => {
     const valA = a[sortBy as keyof Property] || "";
     const valB = b[sortBy as keyof Property] || "";
@@ -74,7 +81,7 @@ function PropertyListInner() {
     return 0;
   });
 
-  // 3. Pagination Step
+  // 4. Pagination Step
   const {
     currentPage,
     pageSize,
@@ -119,11 +126,26 @@ function PropertyListInner() {
           actionLabel="Create Property"
         />
 
-        <SearchInput
-          placeholder={language === "en" ? "Search by name or code..." : "ค้นหาด้วยชื่อหรือรหัส..."}
-          value={searchTerm}
-          onChange={setSearchTerm}
-        />
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex-1">
+            <SearchInput
+              placeholder={language === "en" ? "Search by name or code..." : "ค้นหาด้วยชื่อหรือรหัส..."}
+              value={searchTerm}
+              onChange={setSearchTerm}
+            />
+          </div>
+          <div className="sm:w-48">
+            <select
+              value={status}
+              onChange={(e) => setFilter(e.target.value)}
+              className="w-full h-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm shadow-sm outline-none cursor-pointer"
+            >
+              <option value="all">{language === "en" ? "All Statuses" : "ทุกสถานะ"}</option>
+              <option value="active">{language === "en" ? "Active" : "ใช้งานอยู่"}</option>
+              <option value="inactive">{language === "en" ? "Inactive" : "ไม่ได้ใช้งาน"}</option>
+            </select>
+          </div>
+        </div>
 
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden">
           {loading ? (
