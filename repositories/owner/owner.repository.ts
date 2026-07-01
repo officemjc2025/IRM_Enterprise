@@ -153,3 +153,21 @@ export async function archive(id: string): Promise<boolean> {
 
   return true;
 }
+
+export async function findByOwnerCode(ownerCode: string): Promise<Owner | null> {
+  const supabase = await getSupabase();
+  const { data, error } = await supabase
+    .from("owner")
+    .select("*")
+    .eq("owner_code", ownerCode)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`Error finding owner by owner_code: ${ownerCode}`, error);
+    return null;
+  }
+
+  return data ? mapToOwner(data as OwnerDbRow) : null;
+}
+

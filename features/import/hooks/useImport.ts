@@ -217,7 +217,9 @@ export function useImport() {
       if (res.success) {
         // Refresh API cache and current router to ensure new data is retrieved immediately
         try {
-          const apiPath = selectedModule === "person" ? "/api/v1/persons" : "/api/v1/units";
+          let apiPath = "/api/v1/units";
+          if (selectedModule === "person") apiPath = "/api/v1/persons";
+          else if (selectedModule === "owner") apiPath = "/api/v1/owners";
           await fetch(apiPath, { cache: "no-store" });
         } catch (fetchErr) {
           console.error(`Failed to refresh ${selectedModule} cache:`, fetchErr);
@@ -226,7 +228,9 @@ export function useImport() {
 
         // Navigate automatically to target list after a short duration
         setTimeout(() => {
-          const targetPath = selectedModule === "person" ? "/persons" : "/units";
+          let targetPath = "/units";
+          if (selectedModule === "person") targetPath = "/persons";
+          else if (selectedModule === "owner") targetPath = "/owners";
           router.push(targetPath);
         }, 4000);
       } else {

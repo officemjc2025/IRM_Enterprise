@@ -31,6 +31,7 @@ export type CanonicalField =
   | "national_id"
   | "owner_code"
   | "owner_name"
+  | "owner_type"
   | "person_code"
   | "person_type"
   | "occupancy_type"
@@ -53,6 +54,7 @@ export const CANONICAL_FIELDS: CanonicalField[] = [
   "national_id",
   "owner_code",
   "owner_name",
+  "owner_type",
   "person_code",
   "person_type",
   "occupancy_type",

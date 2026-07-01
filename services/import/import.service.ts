@@ -161,8 +161,29 @@ export const importService = {
       }
     }
 
+    const isOwnerCodeMapped = Object.values(mapping).includes("owner_code");
+
+    // Query existing owners in DB to check for database duplicate owner code
+    const dbOwnersMap = new Map<string, string>(); // owner_code -> id
+    if (isOwnerCodeMapped) {
+      const supabase = createClient();
+      const { data: dbOwners } = await supabase
+        .from("owner")
+        .select("id, owner_code")
+        .is("deleted_at", null);
+
+      if (dbOwners) {
+        dbOwners.forEach((o) => {
+          if (o.owner_code) {
+            dbOwnersMap.set(o.owner_code.trim().toUpperCase(), o.id);
+          }
+        });
+      }
+    }
+
     const unitNumberTracker: Record<string, number[]> = {};
     const personCodeTracker: Record<string, number[]> = {};
+    const ownerCodeTracker: Record<string, number[]> = {};
 
     rows.forEach((row, index) => {
       const rowNumber = index + 2;
@@ -191,6 +212,14 @@ export const importService = {
               personCodeTracker[val] = [];
             }
             personCodeTracker[val].push(rowNumber);
+          }
+        } else if (field === "owner_code") {
+          val = val.toUpperCase();
+          if (val && isOwnerCodeMapped) {
+            if (!ownerCodeTracker[val]) {
+              ownerCodeTracker[val] = [];
+            }
+            ownerCodeTracker[val].push(rowNumber);
           }
         } else if (field === "email") {
           val = val.toLowerCase();
@@ -296,6 +325,20 @@ export const importService = {
         }
       }
 
+      // 3d. Duplicate owner code in database check
+      if (isOwnerCodeMapped && normalizedData.owner_code) {
+        const code = String(normalizedData.owner_code).toUpperCase();
+        if (dbOwnersMap.has(code)) {
+          const headerName = reverseMapping.owner_code || "owner_code";
+          errors.push({
+            rowNumber,
+            column: headerName,
+            message: `Owner code '${code}' already exists in database (will be updated)`,
+            severity: "warning",
+          });
+        }
+      }
+
       results.push({
         rowNumber,
         normalizedData,
@@ -338,6 +381,29 @@ export const importService = {
               rowNumber: rowNum,
               column: headerName,
               message: `Duplicate person code '${code}' detected in rows: ${rowsWithCode.join(", ")}`,
+              severity: "error",
+            };
+
+            const rowRes = results.find((r) => r.rowNumber === rowNum);
+            if (rowRes) {
+              rowRes.errors.push(dupError);
+            }
+            allErrors.push(dupError);
+          });
+        }
+      });
+    }
+
+    // 4c. Duplicate owner code check (if mapped)
+    if (isOwnerCodeMapped) {
+      Object.entries(ownerCodeTracker).forEach(([code, rowsWithCode]) => {
+        if (rowsWithCode.length > 1) {
+          rowsWithCode.forEach((rowNum) => {
+            const headerName = reverseMapping.owner_code || "owner_code";
+            const dupError: ValidationError = {
+              rowNumber: rowNum,
+              column: headerName,
+              message: `Duplicate owner code '${code}' detected in rows: ${rowsWithCode.join(", ")}`,
               severity: "error",
             };
 
