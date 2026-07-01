@@ -210,3 +210,21 @@ export async function search(query: string): Promise<Person[]> {
 
   return (data as PersonDbRow[] || []).map(mapToPerson);
 }
+
+export async function findByPersonCode(personCode: string): Promise<Person | null> {
+  const supabase = await getSupabase();
+  const { data, error } = await supabase
+    .from("person")
+    .select("*")
+    .eq("person_code", personCode)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`Error finding person by person_code: ${personCode}`, error);
+    return null;
+  }
+
+  return data ? mapToPerson(data as PersonDbRow) : null;
+}
+

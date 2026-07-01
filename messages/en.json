@@ -276,5 +276,28 @@
     "missingSheet": "Worksheet 'Units' not found (Available sheets: {sheets})",
     "missingColumns": "Missing required columns: {columns}",
     "missingOptionalColumns": "Missing optional columns: {columns}"
+  },
+  "residentAssignment": {
+    "title": "Resident Assignments",
+    "list": "Resident Assignment List",
+    "create": "Create Assignment",
+    "edit": "Edit Assignment",
+    "details": "Assignment Details",
+    "searchPlaceholder": "Search by unit number or occupant name...",
+    "noRecords": "No resident assignment records found.",
+    "residentName": "Resident Name",
+    "occupancyType": "Occupancy Type",
+    "moveInDate": "Move-in Date",
+    "moveOutDate": "Move-out Date",
+    "primaryResident": "Primary Resident",
+    "yes": "Yes",
+    "no": "No",
+    "remark": "Remark",
+    "unit": "Unit",
+    "property": "Property",
+    "assignResident": "Assign Resident to Unit",
+    "changeUnit": "Change Unit",
+    "moveOut": "Move Out",
+    "reactivate": "Reactivate Assignment"
   }
 }

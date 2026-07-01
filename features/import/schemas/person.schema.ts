@@ -8,16 +8,19 @@ function isValidEmail(email: string): boolean {
 export const personSchema: ImportSchema = {
   moduleName: "person",
   worksheetName: "Persons",
-  requiredFields: ["full_name"],
-  optionalFields: ["phone", "email", "passport_no", "national_id"],
+  requiredFields: ["person_code", "full_name"],
+  optionalFields: ["display_name", "phone", "email", "person_type", "status"],
   defaultMappings: {
-    full_name: ["fullname", "name"],
+    person_code: ["person_code", "code", "personcode", "id"],
+    full_name: ["full_name", "fullname", "name", "full name"],
+    display_name: ["display_name", "displayname", "nickname", "display name"],
     phone: ["phone", "tel", "telephone", "mobile"],
     email: ["email", "mail"],
-    passport_no: ["passport", "passportno"],
-    national_id: ["nationalid", "idcard", "idnumber"],
+    person_type: ["person_type", "type", "persontype", "person type"],
+    status: ["status"],
   },
   validationRules: {
+    person_code: (val) => (val ? null : "Person code is required"),
     full_name: (val) => (val ? null : "Full name is required"),
     email: (val) => {
       if (!val) return null;
@@ -34,5 +37,13 @@ export const personSchema: ImportSchema = {
       }
       return null;
     },
+    status: (val) => {
+      if (!val) return null;
+      const upper = val.toUpperCase();
+      if (upper !== "ACTIVE" && upper !== "INACTIVE") {
+        return `Status must be either 'ACTIVE' or 'INACTIVE': '${val}'`;
+      }
+      return null;
+    }
   },
 };

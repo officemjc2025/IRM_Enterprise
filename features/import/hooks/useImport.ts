@@ -215,17 +215,19 @@ export function useImport() {
 
       setImportResult(res);
       if (res.success) {
-        // Refresh /api/v1/units and current router to ensure new data is retrieved immediately
+        // Refresh API cache and current router to ensure new data is retrieved immediately
         try {
-          await fetch("/api/v1/units", { cache: "no-store" });
+          const apiPath = selectedModule === "person" ? "/api/v1/persons" : "/api/v1/units";
+          await fetch(apiPath, { cache: "no-store" });
         } catch (fetchErr) {
-          console.error("Failed to refresh units cache:", fetchErr);
+          console.error(`Failed to refresh ${selectedModule} cache:`, fetchErr);
         }
         router.refresh();
 
-        // Navigate automatically to /units after a short duration
+        // Navigate automatically to target list after a short duration
         setTimeout(() => {
-          router.push("/units");
+          const targetPath = selectedModule === "person" ? "/persons" : "/units";
+          router.push(targetPath);
         }, 4000);
       } else {
         setError(res.message || "Import failed. No data has been saved.");

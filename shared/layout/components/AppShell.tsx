@@ -51,7 +51,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       return Permissions.WorkOrder;
     }
     if (path.startsWith("/residents")) {
-      return Permissions.ResidentPortal;
+      return Permissions.ManageResident;
     }
     return null;
   };

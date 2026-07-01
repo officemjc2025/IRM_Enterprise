@@ -24,6 +24,7 @@ export type CanonicalField =
   | "ownership_ratio"
   | "remark"
   | "full_name"
+  | "display_name"
   | "phone"
   | "email"
   | "passport_no"
@@ -31,6 +32,7 @@ export type CanonicalField =
   | "owner_code"
   | "owner_name"
   | "person_code"
+  | "person_type"
   | "occupancy_type"
   | "status";
 
@@ -44,6 +46,7 @@ export const CANONICAL_FIELDS: CanonicalField[] = [
   "ownership_ratio",
   "remark",
   "full_name",
+  "display_name",
   "phone",
   "email",
   "passport_no",
@@ -51,6 +54,7 @@ export const CANONICAL_FIELDS: CanonicalField[] = [
   "owner_code",
   "owner_name",
   "person_code",
+  "person_type",
   "occupancy_type",
   "status",
 ];

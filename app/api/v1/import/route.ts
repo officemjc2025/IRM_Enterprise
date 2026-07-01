@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { unitService } from "@/services/unit/unit.service";
 import { Unit, UpdateUnitDto } from "@/features/unit/types/unit.types";
+import { personService } from "@/services/person/person.service";
+import { Person, UpdatePersonDto } from "@/features/person/types/person.types";
+import { Status } from "@/shared/enums/status";
 
 export async function POST(request: Request) {
   console.log("Import Started");
@@ -152,6 +155,177 @@ export async function POST(request: Request) {
         // 2. Restore all updated records to their original states
         for (const updateInfo of updatedUnits) {
           await unitService.updateUnit(updateInfo.id, updateInfo.original);
+        }
+
+        console.log("Import Failed");
+        const elapsed = Date.now() - startTime;
+        return NextResponse.json({
+          success: false,
+          message: "Import failed. No data has been saved.",
+          summary: {
+            inserted: 0,
+            updated: 0,
+            skipped: 0,
+            errors: payload.length,
+            elapsedTime: (elapsed / 1000).toFixed(2) + "s",
+          },
+        });
+      }
+
+      console.log("Import Finished");
+      const elapsed = Date.now() - startTime;
+      return NextResponse.json({
+        success: true,
+        message: "✔ Import completed successfully",
+        summary: {
+          inserted: insertedCount,
+          updated: updatedCount,
+          skipped: skippedCount,
+          errors: 0,
+          elapsedTime: (elapsed / 1000).toFixed(2) + "s",
+        },
+      });
+    }
+
+    if (moduleName === "person") {
+      // 1. Business Validation (all-or-nothing check before any DB write)
+      for (const item of payload) {
+        if (!item.person_code || String(item.person_code).trim() === "") {
+          throw new Error("Person code is required and cannot be blank.");
+        }
+        if (!item.full_name || String(item.full_name).trim() === "") {
+          throw new Error("Full name is required and cannot be blank.");
+        }
+        if (item.email && String(item.email).trim() !== "") {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(String(item.email))) {
+            throw new Error(`Invalid email format: '${item.email}'`);
+          }
+        }
+        if (item.phone && String(item.phone).trim() !== "") {
+          const digitsOnly = String(item.phone).replace(/\D/g, "");
+          if (digitsOnly.length < 8) {
+            throw new Error(`Phone number is too short (min 8 digits): '${item.phone}'`);
+          }
+        }
+        const itemStatus = String(item.status || "ACTIVE").toUpperCase();
+        if (!["ACTIVE", "INACTIVE"].includes(itemStatus)) {
+          throw new Error(`Status '${itemStatus}' is invalid. Allowed values: ACTIVE, INACTIVE.`);
+        }
+      }
+
+      // 2. Fetch existing persons to perform Upsert Strategy (identify update vs insert)
+      const existingPersons = await personService.getPersons();
+      const existingPersonsMap = new Map<string, Person>(); // person_code -> Person
+      existingPersons.forEach((p) => {
+        if (p.person_code) {
+          existingPersonsMap.set(p.person_code.trim().toUpperCase(), p);
+        }
+      });
+
+      // Track created IDs and updated original details for transaction rollback
+      const createdIds: string[] = [];
+      const updatedPersons: { id: string; original: UpdatePersonDto }[] = [];
+
+      let insertedCount = 0;
+      let updatedCount = 0;
+      let skippedCount = 0;
+
+      try {
+        for (const item of payload) {
+          const key = String(item.person_code).trim().toUpperCase();
+          const existing = existingPersonsMap.get(key);
+
+          const parts = String(item.full_name).trim().split(/\s+/);
+          const firstName = parts[0] || "";
+          const lastName = parts.slice(1).join(" ") || "-";
+          const displayName = item.display_name ? String(item.display_name).trim() : `${firstName} ${lastName}`;
+          const remarkValue = item.remark || (item.person_type ? `Type: ${item.person_type}` : null);
+          const emailVal = item.email ? String(item.email).trim().toLowerCase() : null;
+          const phoneVal = item.phone ? String(item.phone).trim() : null;
+          const statusVal = (item.status || "ACTIVE").toUpperCase() as Status;
+
+          if (existing) {
+            // Check if any attributes have actually changed to determine whether to update or skip
+            const hasChanged =
+              existing.first_name !== firstName ||
+              existing.last_name !== lastName ||
+              (existing.display_name || "") !== displayName ||
+              (existing.phone || "") !== (phoneVal || "") ||
+              (existing.email || "") !== (emailVal || "") ||
+              (existing.remarks || "") !== (remarkValue || "") ||
+              existing.status !== statusVal;
+
+            if (hasChanged) {
+              updatedPersons.push({
+                id: existing.id,
+                original: {
+                  person_code: existing.person_code,
+                  first_name: existing.first_name,
+                  last_name: existing.last_name,
+                  display_name: existing.display_name,
+                  phone: existing.phone,
+                  email: existing.email,
+                  remarks: existing.remarks,
+                  status: existing.status,
+                },
+              });
+
+              const updated = await personService.updatePerson(existing.id, {
+                first_name: firstName,
+                last_name: lastName,
+                display_name: displayName,
+                phone: phoneVal,
+                email: emailVal,
+                remarks: remarkValue,
+                status: statusVal,
+              });
+
+              if (!updated) {
+                throw new Error(`Failed to update existing person: ${item.person_code}`);
+              }
+              updatedCount++;
+            } else {
+              skippedCount++;
+            }
+          } else {
+            // Create new person using the Service layer
+            const created = await personService.createPerson({
+              person_code: String(item.person_code).trim(),
+              first_name: firstName,
+              last_name: lastName,
+              display_name: displayName,
+              phone: phoneVal,
+              email: emailVal,
+              remarks: remarkValue,
+              status: statusVal,
+            });
+
+            if (!created?.id) {
+              throw new Error(`Failed to create person: ${item.person_code}`);
+            }
+            createdIds.push(created.id);
+            insertedCount++;
+          }
+        }
+      } catch (dbErr: unknown) {
+        console.error("Database commit error, performing rollback:", dbErr);
+
+        // Perform Transaction Rollback
+        // 1. Delete all inserted records in this batch
+        if (createdIds.length > 0) {
+          const { error: delError } = await supabase
+            .from("persons")
+            .delete()
+            .in("id", createdIds);
+          if (delError) {
+            console.error("Rollback failed to delete created persons:", delError);
+          }
+        }
+
+        // 2. Restore all updated records to their original states
+        for (const updateInfo of updatedPersons) {
+          await personService.updatePerson(updateInfo.id, updateInfo.original);
         }
 
         console.log("Import Failed");

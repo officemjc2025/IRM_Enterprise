@@ -141,7 +141,28 @@ export const importService = {
       }
     }
 
+    const isPersonCodeMapped = Object.values(mapping).includes("person_code");
+
+    // Query existing persons in DB to check for database duplicate person code
+    const dbPersonsMap = new Map<string, string>(); // person_code -> id
+    if (isPersonCodeMapped) {
+      const supabase = createClient();
+      const { data: dbPersons } = await supabase
+        .from("person")
+        .select("id, person_code")
+        .is("deleted_at", null);
+
+      if (dbPersons) {
+        dbPersons.forEach((p) => {
+          if (p.person_code) {
+            dbPersonsMap.set(p.person_code.trim().toUpperCase(), p.id);
+          }
+        });
+      }
+    }
+
     const unitNumberTracker: Record<string, number[]> = {};
+    const personCodeTracker: Record<string, number[]> = {};
 
     rows.forEach((row, index) => {
       const rowNumber = index + 2;
@@ -162,6 +183,14 @@ export const importService = {
               unitNumberTracker[val] = [];
             }
             unitNumberTracker[val].push(rowNumber);
+          }
+        } else if (field === "person_code") {
+          val = val.toUpperCase();
+          if (val && isPersonCodeMapped) {
+            if (!personCodeTracker[val]) {
+              personCodeTracker[val] = [];
+            }
+            personCodeTracker[val].push(rowNumber);
           }
         } else if (field === "email") {
           val = val.toLowerCase();
@@ -253,6 +282,20 @@ export const importService = {
         }
       }
 
+      // 3c. Duplicate person code in database check
+      if (isPersonCodeMapped && normalizedData.person_code) {
+        const code = String(normalizedData.person_code).toUpperCase();
+        if (dbPersonsMap.has(code)) {
+          const headerName = reverseMapping.person_code || "person_code";
+          errors.push({
+            rowNumber,
+            column: headerName,
+            message: `Person code '${code}' already exists in database (will be updated)`,
+            severity: "warning",
+          });
+        }
+      }
+
       results.push({
         rowNumber,
         normalizedData,
@@ -272,6 +315,29 @@ export const importService = {
               rowNumber: rowNum,
               column: headerName,
               message: `Duplicate unit number '${unitNum}' detected in rows: ${rowsWithUnit.join(", ")}`,
+              severity: "error",
+            };
+
+            const rowRes = results.find((r) => r.rowNumber === rowNum);
+            if (rowRes) {
+              rowRes.errors.push(dupError);
+            }
+            allErrors.push(dupError);
+          });
+        }
+      });
+    }
+
+    // 4b. Duplicate person code check (if mapped)
+    if (isPersonCodeMapped) {
+      Object.entries(personCodeTracker).forEach(([code, rowsWithCode]) => {
+        if (rowsWithCode.length > 1) {
+          rowsWithCode.forEach((rowNum) => {
+            const headerName = reverseMapping.person_code || "person_code";
+            const dupError: ValidationError = {
+              rowNumber: rowNum,
+              column: headerName,
+              message: `Duplicate person code '${code}' detected in rows: ${rowsWithCode.join(", ")}`,
               severity: "error",
             };
 

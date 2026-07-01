@@ -1,19 +1,5 @@
-"use client";
-
-import MainLayout from "@/components/layout/MainLayout";
-import { EmptyState } from "@/shared/layout";
-import { useLanguage } from "@/providers/LanguageProvider";
+import { ResidentAssignmentListPage } from "@/features/resident-assignment/pages";
 
 export default function Page() {
-  const { t } = useLanguage();
-  return (
-    <MainLayout>
-      <div className="max-w-4xl mx-auto">
-        <EmptyState
-          title={t.placeholder.residents}
-          description={t.placeholder.residentsDesc}
-        />
-      </div>
-    </MainLayout>
-  );
+  return <ResidentAssignmentListPage />;
 }
