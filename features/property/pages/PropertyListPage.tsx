@@ -5,7 +5,7 @@ import MainLayout from "@/components/layout/MainLayout";
 import Link from "next/link";
 import { Property } from "@/features/property/types/property.types";
 import { useLanguage } from "@/providers/LanguageProvider";
-import { useDebounce, usePagination } from "@/features/property/hooks";
+import { useDebounce, usePagination, useSorting } from "@/features/property/hooks";
 import { PageHeader, SearchInput, EmptyState, LoadingState } from "@/shared/ui";
 
 function PropertyListInner() {
@@ -14,6 +14,8 @@ function PropertyListInner() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
+  const { sortBy, sortOrder, setSorting } = useSorting("code", "asc");
 
   const fetchProperties = async () => {
     try {
@@ -48,6 +50,7 @@ function PropertyListInner() {
     }
   };
 
+  // 1. Search Filter Step
   const filteredProperties = properties.filter((p) => {
     const term = debouncedSearchTerm.toLowerCase().trim();
     if (!term) return true;
@@ -58,6 +61,20 @@ function PropertyListInner() {
     );
   });
 
+  // 2. Sort Step
+  const sortedProperties = [...filteredProperties].sort((a, b) => {
+    const valA = a[sortBy as keyof Property] || "";
+    const valB = b[sortBy as keyof Property] || "";
+
+    const strA = String(valA).toLowerCase();
+    const strB = String(valB).toLowerCase();
+
+    if (strA < strB) return sortOrder === "asc" ? -1 : 1;
+    if (strA > strB) return sortOrder === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  // 3. Pagination Step
   const {
     currentPage,
     pageSize,
@@ -70,11 +87,28 @@ function PropertyListInner() {
     prevPage,
     firstPage,
     lastPage,
-  } = usePagination(filteredProperties.length);
+  } = usePagination(sortedProperties.length);
 
   const sliceStart = (currentPage - 1) * pageSize;
   const sliceEnd = sliceStart + pageSize;
-  const paginatedProperties = filteredProperties.slice(sliceStart, sliceEnd);
+  const paginatedProperties = sortedProperties.slice(sliceStart, sliceEnd);
+
+  const renderSortableHeader = (label: string, key: string) => {
+    const isSorted = sortBy === key;
+    return (
+      <th
+        onClick={() => setSorting(key)}
+        className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition select-none"
+      >
+        <div className="flex items-center gap-1">
+          <span>{label}</span>
+          <span className="text-slate-400 text-xs">
+            {isSorted ? (sortOrder === "asc" ? "▲" : "▼") : "↕"}
+          </span>
+        </div>
+      </th>
+    );
+  };
 
   return (
     <MainLayout>
@@ -100,10 +134,10 @@ function PropertyListInner() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                  <th className="p-4">Code</th>
-                  <th className="p-4">Name (TH)</th>
-                  <th className="p-4">Name (EN)</th>
-                  <th className="p-4">Status</th>
+                  {renderSortableHeader("Code", "code")}
+                  {renderSortableHeader("Name (TH)", "name_th")}
+                  {renderSortableHeader("Name (EN)", "name_en")}
+                  {renderSortableHeader("Status", "status")}
                   <th className="p-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -142,7 +176,7 @@ function PropertyListInner() {
         </div>
 
         {/* Pagination Controls */}
-        {!loading && filteredProperties.length > 0 && (
+        {!loading && sortedProperties.length > 0 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg p-4 shadow-sm text-sm">
             <div className="flex items-center gap-2">
               <span className="text-slate-500">Show:</span>
@@ -156,7 +190,7 @@ function PropertyListInner() {
                 <option value={50}>50</option>
               </select>
               <span className="text-slate-500 ml-2">
-                Showing {startIndex}–{endIndex} of {filteredProperties.length} properties
+                Showing {startIndex}–{endIndex} of {sortedProperties.length} properties
               </span>
             </div>
 
