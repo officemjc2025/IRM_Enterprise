@@ -118,8 +118,8 @@ export default function OccupancyListPage() {
             className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm"
           >
             <option value="">{t.common.allStatuses}</option>
-            <option value="active">{t.common.active}</option>
-            <option value="inactive">{t.common.inactive}</option>
+            <option value="ACTIVE">{t.common.active}</option>
+            <option value="INACTIVE">{t.common.inactive}</option>
           </select>
         </div>
 
@@ -154,7 +154,7 @@ export default function OccupancyListPage() {
                     <td className="p-4">
                       <span
                         className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                          o.status === "active"
+                          o.status === "ACTIVE"
                             ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
                             : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
                         }`}

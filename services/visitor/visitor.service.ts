@@ -34,7 +34,7 @@ export const visitorService = {
 
     // 2. Verify Unit has active occupancy
     const occupancies = await occupancyService.getOccupanciesByUnit(dto.unit_id);
-    const activeOccs = occupancies.filter((o) => o.status === "active");
+    const activeOccs = occupancies.filter((o) => o.status === "ACTIVE");
     if (activeOccs.length === 0) {
       throw new Error("Unit must have at least one active occupancy to register a visitor");
     }

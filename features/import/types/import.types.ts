@@ -16,26 +16,42 @@ export interface PreviewResult {
 
 export type CanonicalField =
   | "property_code"
+  | "property_name"
   | "building_code"
   | "floor"
   | "unit_number"
   | "area"
   | "ownership_ratio"
-  | "owner_name"
+  | "remark"
+  | "full_name"
   | "phone"
   | "email"
+  | "passport_no"
+  | "national_id"
+  | "owner_code"
+  | "owner_name"
+  | "person_code"
+  | "occupancy_type"
   | "status";
 
 export const CANONICAL_FIELDS: CanonicalField[] = [
   "property_code",
+  "property_name",
   "building_code",
   "floor",
   "unit_number",
   "area",
   "ownership_ratio",
-  "owner_name",
+  "remark",
+  "full_name",
   "phone",
   "email",
+  "passport_no",
+  "national_id",
+  "owner_code",
+  "owner_name",
+  "person_code",
+  "occupancy_type",
   "status",
 ];
 
@@ -66,4 +82,13 @@ export interface ValidationResult {
   summary: ImportValidationSummary;
   results: RowValidationResult[];
   allErrors: ValidationError[];
+}
+
+export interface ImportSchema {
+  moduleName: string;
+  worksheetName: string;
+  requiredFields: CanonicalField[];
+  optionalFields: CanonicalField[];
+  defaultMappings: Partial<Record<CanonicalField, string[]>>;
+  validationRules?: Partial<Record<CanonicalField, (val: string) => string | null>>;
 }

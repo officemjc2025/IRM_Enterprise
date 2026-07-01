@@ -1,42 +1,17 @@
 import { parseFile } from "@/features/import/utils/excelParser";
+import { createClient } from "@/lib/supabase/client";
 import {
   CanonicalField,
-  CANONICAL_FIELDS,
   ColumnMapping,
   ValidationError,
   ValidationResult,
   RowValidationResult,
-  ImportValidationSummary
+  ImportValidationSummary,
+  ImportSchema
 } from "@/features/import/types/import.types";
-
-const AUTO_MAPPING_RULES: Record<CanonicalField, string[]> = {
-  property_code: ["code", "propcode", "propertycode"],
-  building_code: ["building", "bldg", "buildingcode"],
-  floor: ["floor", "level"],
-  unit_number: ["roomno", "room", "unit", "unitno", "unitnumber"],
-  area: ["area", "size", "sqm", "sq_m"],
-  ownership_ratio: ["ratio", "ownershipratio", "ownership", "share"],
-  owner_name: ["ownername", "owner", "name", "customername"],
-  phone: ["phone", "tel", "telephone", "mobile"],
-  email: ["email", "mail"],
-  status: ["status", "active"],
-};
-
-const ALLOWED_STATUSES = [
-  "ACTIVE",
-  "INACTIVE",
-  "VACANT",
-  "OWNER_OCCUPIED",
-  "TENANT_OCCUPIED"
-];
 
 function normalizePhone(phone: string): string {
   return phone.trim().replace(/[^\d+]+/g, "");
-}
-
-function isValidEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
 }
 
 export const importService = {
@@ -52,24 +27,26 @@ export const importService = {
     };
   },
 
-  autoMap(headers: string[]): ColumnMapping {
+  autoMap(headers: string[], schema: ImportSchema): ColumnMapping {
     const mapping: ColumnMapping = {};
+    const canonicalFields = [...schema.requiredFields, ...schema.optionalFields];
 
     headers.forEach((header) => {
       const normalized = header.toLowerCase().replace(/[\s_]+/g, "");
-
       let matchedField: CanonicalField | "" = "";
 
-      for (const field of CANONICAL_FIELDS) {
+      // 1. Direct match with field name
+      for (const field of canonicalFields) {
         if (field.replace(/_/g, "") === normalized) {
           matchedField = field;
           break;
         }
       }
 
+      // 2. Rule mapping match
       if (!matchedField) {
-        for (const [field, rules] of Object.entries(AUTO_MAPPING_RULES) as [CanonicalField, string[]][]) {
-          if (rules.includes(normalized)) {
+        for (const [field, rules] of Object.entries(schema.defaultMappings) as [CanonicalField, string[]][]) {
+          if (canonicalFields.includes(field) && rules.includes(normalized)) {
             matchedField = field;
             break;
           }
@@ -82,20 +59,20 @@ export const importService = {
     return mapping;
   },
 
-  getStorageKey(headers: string[]): string {
-    return `import-mapping:${headers.join(",")}`;
+  getStorageKey(headers: string[], moduleName: string): string {
+    return `import-mapping:${moduleName}:${headers.join(",")}`;
   },
 
-  saveMapping(headers: string[], mapping: ColumnMapping): void {
+  saveMapping(headers: string[], mapping: ColumnMapping, moduleName: string): void {
     if (typeof window !== "undefined") {
-      const key = this.getStorageKey(headers);
+      const key = this.getStorageKey(headers, moduleName);
       localStorage.setItem(key, JSON.stringify(mapping));
     }
   },
 
-  loadMapping(headers: string[]): ColumnMapping | null {
+  loadMapping(headers: string[], moduleName: string): ColumnMapping | null {
     if (typeof window !== "undefined") {
-      const key = this.getStorageKey(headers);
+      const key = this.getStorageKey(headers, moduleName);
       const saved = localStorage.getItem(key);
       if (saved) {
         try {
@@ -108,7 +85,12 @@ export const importService = {
     return null;
   },
 
-  validateData(rows: Record<string, unknown>[], mapping: ColumnMapping): ValidationResult {
+  async validateData(
+    rows: Record<string, unknown>[],
+    mapping: ColumnMapping,
+    schema: ImportSchema,
+    selectedPropertyId?: string
+  ): Promise<ValidationResult> {
     const results: RowValidationResult[] = [];
     const allErrors: ValidationError[] = [];
 
@@ -118,6 +100,46 @@ export const importService = {
         reverseMapping[field] = header;
       }
     });
+
+    // Fetch active properties from database ONLY if selectedPropertyId is not provided
+    const isPropertyCodeMapped = !selectedPropertyId && Object.values(mapping).includes("property_code");
+    const propertyCodeMap = new Map<string, string>(); // property_code (uppercase) -> id
+
+    if (isPropertyCodeMapped) {
+      const supabase = createClient();
+      const { data: propertiesData } = await supabase
+        .from("properties")
+        .select("id, property_code")
+        .is("deleted_at", null);
+
+      if (propertiesData) {
+        propertiesData.forEach((p) => {
+          if (p.property_code) {
+            propertyCodeMap.set(p.property_code.trim().toUpperCase(), p.id);
+          }
+        });
+      }
+    }
+
+    const isUnitNumberMapped = Object.values(mapping).includes("unit_number");
+
+    // Query existing units in DB to check for database duplicate unit number
+    let dbUnitsMap = new Map<string, string>(); // "property_id:unit_number" -> id
+    if (isUnitNumberMapped) {
+      const supabase = createClient();
+      const { data: dbUnits } = await supabase
+        .from("unit")
+        .select("id, property_id, unit_number")
+        .is("deleted_at", null);
+
+      if (dbUnits) {
+        dbUnits.forEach((u) => {
+          if (u.property_id && u.unit_number) {
+            dbUnitsMap.set(`${u.property_id}:${u.unit_number.trim().toUpperCase()}`, u.id);
+          }
+        });
+      }
+    }
 
     const unitNumberTracker: Record<string, number[]> = {};
 
@@ -131,12 +153,11 @@ export const importService = {
 
         const rawValue = row[header];
         let val = rawValue !== null && rawValue !== undefined ? String(rawValue).trim() : "";
-
         val = val.replace(/\s+/g, " ");
 
         if (field === "unit_number") {
           val = val.toUpperCase();
-          if (val) {
+          if (val && isUnitNumberMapped) {
             if (!unitNumberTracker[val]) {
               unitNumberTracker[val] = [];
             }
@@ -153,8 +174,16 @@ export const importService = {
         normalizedData[field] = val || null;
       });
 
-      const requiredFields: CanonicalField[] = ["unit_number", "floor", "status"];
-      requiredFields.forEach((field) => {
+      // Inject selected property_id directly if provided
+      if (selectedPropertyId) {
+        normalizedData.property_id = selectedPropertyId;
+      }
+
+      // 1. Required fields check
+      schema.requiredFields.forEach((field) => {
+        // Skip checking property_code if selectedPropertyId is provided
+        if (field === "property_code" && selectedPropertyId) return;
+
         const headerName = reverseMapping[field] || field;
         const val = normalizedData[field];
         if (val === null || val === undefined || String(val).trim() === "") {
@@ -167,70 +196,59 @@ export const importService = {
         }
       });
 
-      if (normalizedData.email) {
-        const val = String(normalizedData.email);
-        const headerName = reverseMapping.email || "email";
-        if (!isValidEmail(val)) {
+      // 2. Custom validation rules from schema
+      if (schema.validationRules) {
+        Object.entries(mapping).forEach(([header, field]) => {
+          if (!field) return;
+          // Skip validating property_code if selectedPropertyId is provided
+          if (field === "property_code" && selectedPropertyId) return;
+
+          const val = String(normalizedData[field] || "");
+          const rule = schema.validationRules?.[field];
+          if (rule) {
+            const ruleErr = rule(val);
+            if (ruleErr) {
+              const severity = (field === "phone") ? "warning" : "error";
+              errors.push({
+                rowNumber,
+                column: header,
+                message: ruleErr,
+                severity,
+              });
+            }
+          }
+        });
+      }
+
+      // 3. Database existence check for property_code (only if mapped and not using selectedPropertyId)
+      if (isPropertyCodeMapped && normalizedData.property_code) {
+        const propCode = String(normalizedData.property_code).trim().toUpperCase();
+        const headerName = reverseMapping.property_code || "property_code";
+        const matchedId = propertyCodeMap.get(propCode);
+        if (!matchedId) {
           errors.push({
             rowNumber,
             column: headerName,
-            message: `Invalid email format: '${val}'`,
+            message: `Property code '${propCode}' does not exist in database`,
             severity: "error",
           });
+        } else {
+          normalizedData.property_id = matchedId;
         }
       }
 
-      if (normalizedData.phone) {
-        const val = String(normalizedData.phone);
-        const headerName = reverseMapping.phone || "phone";
-        const digitsOnly = val.replace(/\D/g, "");
-        if (digitsOnly.length < 8) {
+      // 3b. Duplicate unit number in database check
+      if (normalizedData.unit_number && normalizedData.property_id) {
+        const propId = String(normalizedData.property_id);
+        const unitNum = String(normalizedData.unit_number).toUpperCase();
+        const key = `${propId}:${unitNum}`;
+        if (dbUnitsMap.has(key)) {
+          const headerName = reverseMapping.unit_number || "unit_number";
           errors.push({
             rowNumber,
             column: headerName,
-            message: `Phone number is too short (min 8 digits): '${val}'`,
+            message: `Unit number '${unitNum}' already exists in database (will be updated)`,
             severity: "warning",
-          });
-        }
-      }
-
-      if (normalizedData.area) {
-        const val = String(normalizedData.area);
-        const headerName = reverseMapping.area || "area";
-        const num = Number(val);
-        if (isNaN(num) || num <= 0) {
-          errors.push({
-            rowNumber,
-            column: headerName,
-            message: `Area must be a positive number: '${val}'`,
-            severity: "error",
-          });
-        }
-      }
-
-      if (normalizedData.ownership_ratio) {
-        const val = String(normalizedData.ownership_ratio);
-        const headerName = reverseMapping.ownership_ratio || "ownership_ratio";
-        const num = Number(val);
-        if (isNaN(num) || num < 0) {
-          errors.push({
-            rowNumber,
-            column: headerName,
-            message: `Ownership ratio must be a non-negative number: '${val}'`,
-            severity: "error",
-          });
-        }
-      }
-
-      if (normalizedData.status) {
-        const val = String(normalizedData.status);
-        const headerName = reverseMapping.status || "status";
-        if (!ALLOWED_STATUSES.includes(val)) {
-          errors.push({
-            rowNumber,
-            column: headerName,
-            message: `Status must be one of: ${ALLOWED_STATUSES.join(", ")}. Received: '${val}'`,
-            severity: "error",
           });
         }
       }
@@ -244,25 +262,28 @@ export const importService = {
       allErrors.push(...errors);
     });
 
-    Object.entries(unitNumberTracker).forEach(([unitNum, rowsWithUnit]) => {
-      if (rowsWithUnit.length > 1) {
-        rowsWithUnit.forEach((rowNum) => {
-          const headerName = reverseMapping.unit_number || "unit_number";
-          const dupError: ValidationError = {
-            rowNumber: rowNum,
-            column: headerName,
-            message: `Duplicate unit number '${unitNum}' detected in rows: ${rowsWithUnit.join(", ")}`,
-            severity: "error",
-          };
+    // 4. Duplicate unit number check (if mapped)
+    if (isUnitNumberMapped) {
+      Object.entries(unitNumberTracker).forEach(([unitNum, rowsWithUnit]) => {
+        if (rowsWithUnit.length > 1) {
+          rowsWithUnit.forEach((rowNum) => {
+            const headerName = reverseMapping.unit_number || "unit_number";
+            const dupError: ValidationError = {
+              rowNumber: rowNum,
+              column: headerName,
+              message: `Duplicate unit number '${unitNum}' detected in rows: ${rowsWithUnit.join(", ")}`,
+              severity: "error",
+            };
 
-          const rowRes = results.find((r) => r.rowNumber === rowNum);
-          if (rowRes) {
-            rowRes.errors.push(dupError);
-          }
-          allErrors.push(dupError);
-        });
-      }
-    });
+            const rowRes = results.find((r) => r.rowNumber === rowNum);
+            if (rowRes) {
+              rowRes.errors.push(dupError);
+            }
+            allErrors.push(dupError);
+          });
+        }
+      });
+    }
 
     allErrors.sort((a, b) => a.rowNumber - b.rowNumber);
 
@@ -296,5 +317,16 @@ export const importService = {
       results,
       allErrors,
     };
+  },
+
+  async commit(payload: Record<string, unknown>[], moduleName: string) {
+    const res = await fetch("/api/v1/import", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ payload, moduleName }),
+    });
+    return res.json();
   }
 };

@@ -28,7 +28,7 @@ function mapToProperty(row: PropertyDbRow): Property {
     code: row.property_code,
     name_th: row.property_name_th,
     name_en: row.property_name_en || "",
-    status: (row.status || "active").toLowerCase() as Status,
+    status: (row.status || "ACTIVE").toUpperCase() as Status,
     created_at: row.created_at,
     updated_at: row.updated_at,
     created_by: row.created_by,
@@ -128,7 +128,7 @@ export async function archive(id: string): Promise<boolean> {
     .from("property")
     .update({ 
       deleted_at: new Date().toISOString(),
-      status: "inactive"
+      status: "INACTIVE"
     })
     .eq("id", id);
 

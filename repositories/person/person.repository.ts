@@ -49,7 +49,7 @@ function mapToPerson(row: PersonDbRow): Person {
     id_card: row.id_card,
     passport: row.passport,
     photo: row.photo,
-    status: (row.status || "active").toLowerCase() as Status,
+    status: (row.status || "ACTIVE").toUpperCase() as Status,
     remarks: row.remarks,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -182,7 +182,7 @@ export async function archive(id: string): Promise<boolean> {
     .from("person")
     .update({
       deleted_at: new Date().toISOString(),
-      status: "inactive"
+      status: "INACTIVE"
     })
     .eq("id", id);
 

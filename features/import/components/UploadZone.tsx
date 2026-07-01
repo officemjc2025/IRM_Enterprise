@@ -2,6 +2,7 @@
 
 import React, { useRef, useState } from "react";
 import { useLanguage } from "@/providers/LanguageProvider";
+import { MAX_FILE_SIZE_MB } from "../hooks/useImport";
 
 interface UploadZoneProps {
   onFileSelected: (file: File) => void;
@@ -12,11 +13,17 @@ interface UploadZoneProps {
 export default function UploadZone({ onFileSelected, loading, onError }: UploadZoneProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragActive, setIsDragActive] = useState(false);
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   const processFile = (file: File) => {
     const extension = file.name.split(".").pop()?.toLowerCase();
-    if (extension === "xlsx" || extension === "xls") {
+    if (extension === "xlsx" || extension === "xls" || extension === "csv") {
+      // Size check
+      const maxSizeBytes = MAX_FILE_SIZE_MB * 1024 * 1024;
+      if (file.size > maxSizeBytes) {
+        onError("fileTooLarge");
+        return;
+      }
       onFileSelected(file);
     } else {
       onError("invalidFileType");
@@ -65,7 +72,7 @@ export default function UploadZone({ onFileSelected, loading, onError }: UploadZ
       <input
         ref={fileInputRef}
         type="file"
-        accept=".xlsx,.xls"
+        accept=".xlsx,.xls,.csv"
         className="hidden"
         onChange={handleChange}
         disabled={loading}
@@ -73,11 +80,15 @@ export default function UploadZone({ onFileSelected, loading, onError }: UploadZ
       <div className="flex flex-col items-center justify-center space-y-3">
         <span className="text-4xl text-slate-400">📊</span>
         <div className="text-sm text-slate-700 dark:text-slate-300">
-          <span className="font-semibold text-[#D4AF37]">{t.import.uploadAreaTitle.split("or")[0]}</span>
-          {t.import.uploadAreaTitle.includes("or") ? "or " + t.import.uploadAreaTitle.split("or")[1] : ""}
+          <span className="font-semibold text-[#D4AF37]">
+            {language === "en" ? "Drag & drop your file here " : "ลากและวางไฟล์ของคุณที่นี่ "}
+          </span>
+          {language === "en" ? "or click to browse" : "หรือคลิกเพื่อเลือกไฟล์"}
         </div>
         <div className="text-xs text-slate-400 dark:text-slate-500">
-          {t.import.uploadAreaSubtitle}
+          {language === "en" 
+            ? `Supports Excel (.xlsx, .xls) and CSV (.csv) up to ${MAX_FILE_SIZE_MB}MB`
+            : `รองรับไฟล์ Excel (.xlsx, .xls) และ CSV (.csv) ขนาดสูงสุดไม่เกิน ${MAX_FILE_SIZE_MB}MB`}
         </div>
       </div>
     </div>

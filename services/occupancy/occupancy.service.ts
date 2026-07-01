@@ -35,23 +35,23 @@ export const occupancyService = {
       throw new Error("End date must be greater than or equal to start date");
     }
 
-    if (dto.occupancy_type === "OWNER" && dto.status !== "inactive") {
+    if (dto.occupancy_type === "OWNER" && dto.status !== "INACTIVE") {
       const existing = await occupancyRepository.findByUnitId(dto.unit_id);
       const activeOwnerExists = existing.some(
-        (o) => o.occupancy_type === "OWNER" && o.status === "active"
+        (o) => o.occupancy_type === "OWNER" && o.status === "ACTIVE"
       );
       if (activeOwnerExists) {
         throw new Error("Unit already has an active OWNER assignment");
       }
     }
 
-    if (dto.status !== "inactive") {
+    if (dto.status !== "INACTIVE") {
       const existing = await occupancyRepository.findByPersonId(dto.person_id);
       const duplicateActiveExists = existing.some(
         (o) =>
           o.unit_id === dto.unit_id &&
           o.occupancy_type === dto.occupancy_type &&
-          o.status === "active"
+          o.status === "ACTIVE"
       );
       if (duplicateActiveExists) {
         throw new Error(`Person already has an active ${dto.occupancy_type} assignment for this unit`);
@@ -82,23 +82,23 @@ export const occupancyService = {
       throw new Error("End date must be greater than or equal to start date");
     }
 
-    if (newType === "OWNER" && newStatus === "active") {
+    if (newType === "OWNER" && newStatus === "ACTIVE") {
       const sameUnit = await occupancyRepository.findByUnitId(newUnitId);
       const activeOwnerExists = sameUnit.some(
-        (o) => o.occupancy_type === "OWNER" && o.status === "active" && o.id !== id
+        (o) => o.occupancy_type === "OWNER" && o.status === "ACTIVE" && o.id !== id
       );
       if (activeOwnerExists) {
         throw new Error("Unit already has an active OWNER assignment");
       }
     }
 
-    if (newStatus === "active") {
+    if (newStatus === "ACTIVE") {
       const samePerson = await occupancyRepository.findByPersonId(newPersonId);
       const duplicateActiveExists = samePerson.some(
         (o) =>
           o.unit_id === newUnitId &&
           o.occupancy_type === newType &&
-          o.status === "active" &&
+          o.status === "ACTIVE" &&
           o.id !== id
       );
       if (duplicateActiveExists) {

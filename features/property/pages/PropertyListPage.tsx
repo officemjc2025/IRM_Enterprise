@@ -65,7 +65,7 @@ function PropertyListInner() {
   // 2. Status Filter Step
   const filteredProperties = searchedProperties.filter((p) => {
     if (status === "all") return true;
-    return p.status.toLowerCase() === status.toLowerCase();
+    return p.status.toUpperCase() === status.toUpperCase();
   });
 
   // 3. Sort Step
@@ -141,8 +141,8 @@ function PropertyListInner() {
               className="w-full h-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm shadow-sm outline-none cursor-pointer"
             >
               <option value="all">{language === "en" ? "All Statuses" : "ทุกสถานะ"}</option>
-              <option value="active">{language === "en" ? "Active" : "ใช้งานอยู่"}</option>
-              <option value="inactive">{language === "en" ? "Inactive" : "ไม่ได้ใช้งาน"}</option>
+              <option value="ACTIVE">{language === "en" ? "Active" : "ใช้งานอยู่"}</option>
+              <option value="INACTIVE">{language === "en" ? "Inactive" : "ไม่ได้ใช้งาน"}</option>
             </select>
           </div>
         </div>
@@ -171,7 +171,7 @@ function PropertyListInner() {
                     <td className="p-4">{p.name_en || "-"}</td>
                     <td className="p-4">
                       <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        p.status === "active" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                        p.status === "ACTIVE" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
                       }`}>
                         {p.status}
                       </span>

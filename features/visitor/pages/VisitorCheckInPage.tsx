@@ -31,7 +31,7 @@ function UnitResultCard({ unit, onSelect }: { unit: Unit; onSelect: (unit: Unit)
     fetchOccupants();
   }, [unit.id]);
 
-  const activeOccupants = occupancies.filter(o => o.status === "active");
+  const activeOccupants = occupancies.filter(o => o.status === "ACTIVE");
   const summaryText = activeOccupants.length > 0 
     ? `${activeOccupants.length} ${t.occupancy.activeOccupants}`
     : t.visitor.noActiveOccupants;
@@ -46,7 +46,7 @@ function UnitResultCard({ unit, onSelect }: { unit: Unit; onSelect: (unit: Unit)
           </p>
         </div>
         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-          unit.status === "active" 
+          unit.status === "ACTIVE" 
             ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" 
             : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
         }`}>
@@ -201,7 +201,7 @@ export default function VisitorCheckInPage() {
       return;
     }
 
-    const activeOcc = unitOccupancies.find(o => o.status === "active");
+    const activeOcc = unitOccupancies.find(o => o.status === "ACTIVE");
 
     const combinedRemarks = [
       trimmedRemarks,
@@ -332,7 +332,7 @@ export default function VisitorCheckInPage() {
                 <div>
                   <span className="text-slate-400 block mb-0.5">{t.visitor.occupancySummary}</span>
                   <span className="text-slate-800 dark:text-slate-200">
-                    {unitOccupancies.filter((o) => o.status === "active").length} {t.occupancy.activeOccupants}
+                    {unitOccupancies.filter((o) => o.status === "ACTIVE").length} {t.occupancy.activeOccupants}
                   </span>
                 </div>
               </div>

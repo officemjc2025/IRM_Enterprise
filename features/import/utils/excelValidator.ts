@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
 import { importService } from "@/services/import/import.service";
-import { CanonicalField } from "../types/import.types";
+import { CanonicalField, ImportSchema } from "../types/import.types";
 
 export interface ValidationCheckResult {
   status: "success" | "warning" | "error";
@@ -20,18 +20,7 @@ export interface FileValidationResult {
   headers: string[];
 }
 
-const REQUIRED_FIELDS: CanonicalField[] = ["unit_number", "floor", "status"];
-const OPTIONAL_FIELDS: CanonicalField[] = [
-  "property_code",
-  "building_code",
-  "area",
-  "ownership_ratio",
-  "owner_name",
-  "phone",
-  "email",
-];
-
-export async function validateFileStructure(file: File): Promise<FileValidationResult> {
+export async function validateFileStructure(file: File, schema: ImportSchema): Promise<FileValidationResult> {
   const result: FileValidationResult = {
     isValid: false,
     overallStatus: "error",
@@ -68,10 +57,10 @@ export async function validateFileStructure(file: File): Promise<FileValidationR
       message: "File opened and read successfully",
     };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : "Invalid Excel file structure";
+    const msg = err instanceof Error ? err.message : "Invalid file structure";
     result.checks.fileOpen = {
       status: "error",
-      message: "Failed to open or parse Excel file",
+      message: "Failed to open or parse file",
       details: [msg],
     };
     result.checks.sheetExists = { status: "error", message: "Check skipped due to open file error" };
@@ -79,15 +68,22 @@ export async function validateFileStructure(file: File): Promise<FileValidationR
     return result;
   }
 
-  // 2. Check if required worksheet "Units" exists (case-insensitive)
-  const targetSheetName = workbook.SheetNames.find(
-    (name) => name.toLowerCase() === "units"
+  // 2. Check if worksheet from schema or default Sheet exists
+  let targetSheetName = workbook.SheetNames.find(
+    (name) => name.toLowerCase() === schema.worksheetName.toLowerCase()
   );
+
+  const isCsv = file.name.toLowerCase().endsWith(".csv");
+  if (!targetSheetName) {
+    if (isCsv || workbook.SheetNames.length === 1) {
+      targetSheetName = workbook.SheetNames[0];
+    }
+  }
 
   if (!targetSheetName) {
     result.checks.sheetExists = {
       status: "error",
-      message: "Required worksheet 'Units' is missing",
+      message: `Required worksheet '${schema.worksheetName}' is missing`,
       details: [`Available worksheets: ${workbook.SheetNames.join(", ") || "none"}`],
     };
     result.checks.columnsExist = { status: "error", message: "Check skipped due to missing worksheet" };
@@ -96,10 +92,12 @@ export async function validateFileStructure(file: File): Promise<FileValidationR
 
   result.checks.sheetExists = {
     status: "success",
-    message: `Required worksheet 'Units' found (matches as '${targetSheetName}')`,
+    message: isCsv 
+      ? `Data sheet read successfully (CSV first sheet '${targetSheetName}')` 
+      : `Target worksheet found ('${targetSheetName}')`,
   };
 
-  // 3. Check if required columns exist in the worksheet
+  // 3. Check columns based on schema
   try {
     const worksheet = workbook.Sheets[targetSheetName];
     const sheetArrays = XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
@@ -113,23 +111,23 @@ export async function validateFileStructure(file: File): Promise<FileValidationR
     if (rawHeaders.length === 0) {
       result.checks.columnsExist = {
         status: "error",
-        message: "No column headers found in 'Units' sheet",
+        message: "No column headers found in selected sheet",
       };
       return result;
     }
 
-    const mapping = importService.autoMap(rawHeaders);
+    const mapping = importService.autoMap(rawHeaders, schema);
     const mappedFields = Object.values(mapping).filter((f): f is CanonicalField => f !== "");
 
     const missingRequired: string[] = [];
-    REQUIRED_FIELDS.forEach((field) => {
+    schema.requiredFields.forEach((field) => {
       if (!mappedFields.includes(field)) {
         missingRequired.push(field);
       }
     });
 
     const missingOptional: string[] = [];
-    OPTIONAL_FIELDS.forEach((field) => {
+    schema.optionalFields.forEach((field) => {
       if (!mappedFields.includes(field)) {
         missingOptional.push(field);
       }
@@ -142,17 +140,22 @@ export async function validateFileStructure(file: File): Promise<FileValidationR
         details: missingRequired.map((f) => `Missing required column for field: '${f}'`),
       };
     } else if (missingOptional.length > 0) {
+      const friendlyMessages: Record<string, string> = {
+        property_code: "Property will be assigned automatically from the selected project.",
+        building_code: "Building information is optional and will be left blank.",
+        remark: "Remark is optional.",
+      };
       result.checks.columnsExist = {
         status: "warning",
-        message: "Some optional columns are missing, but file is importable",
-        details: missingOptional.map((f) => `Optional column for field '${f}' is missing`),
+        message: "Ready to import. Some optional columns are not present.",
+        details: missingOptional.map((f) => friendlyMessages[f] || `Optional field '${f}' is not mapped.`),
       };
       result.isValid = true;
       result.overallStatus = "warning";
     } else {
       result.checks.columnsExist = {
         status: "success",
-        message: "All required and optional columns are present",
+        message: "All required and optional columns are present. Ready to import.",
       };
       result.isValid = true;
       result.overallStatus = "success";
@@ -168,3 +171,4 @@ export async function validateFileStructure(file: File): Promise<FileValidationR
 
   return result;
 }
+export default validateFileStructure;

@@ -116,12 +116,12 @@ export default function OwnerListPage() {
                     <td className="p-4">
                       <span
                         className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                          o.status === "active"
+                          o.status === "ACTIVE"
                             ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
                             : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
                         }`}
                       >
-                        {o.status === "active" ? t.common.active : t.common.inactive}
+                        {o.status === "ACTIVE" ? t.common.active : t.common.inactive}
                       </span>
                     </td>
                     <td className="p-4 text-right space-x-2">

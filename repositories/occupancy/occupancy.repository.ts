@@ -42,7 +42,7 @@ function mapToOccupancy(row: OccupancyDbRow): Occupancy {
     occupancy_type: row.occupancy_type as OccupancyType,
     start_date: row.start_date,
     end_date: row.end_date,
-    status: (row.status || "active").toLowerCase() as Status,
+    status: (row.status || "ACTIVE").toUpperCase() as Status,
     remarks: row.remarks,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -169,7 +169,7 @@ export async function archive(id: string): Promise<boolean> {
     .from("occupancy")
     .update({
       deleted_at: new Date().toISOString(),
-      status: "inactive"
+      status: "INACTIVE"
     })
     .eq("id", id);
 

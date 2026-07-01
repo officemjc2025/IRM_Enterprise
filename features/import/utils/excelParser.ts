@@ -5,7 +5,7 @@ export interface ParsedData {
   rows: Record<string, unknown>[];
 }
 
-export async function parseFile(file: File): Promise<ParsedData> {
+export async function parseFile(file: File, worksheetName?: string): Promise<ParsedData> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
@@ -17,8 +17,13 @@ export async function parseFile(file: File): Promise<ParsedData> {
         }
 
         const workbook = XLSX.read(data, { type: "array" });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // Select target sheet based on name from schema if it exists, otherwise fall back to first sheet
+        const targetSheetName = worksheetName
+          ? (workbook.SheetNames.find((name) => name.toLowerCase() === worksheetName.toLowerCase()) || workbook.SheetNames[0])
+          : workbook.SheetNames[0];
+          
+        const worksheet = workbook.Sheets[targetSheetName];
 
         const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
           defval: null,

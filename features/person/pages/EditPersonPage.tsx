@@ -4,6 +4,7 @@ import React, { use, useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useRouter } from "next/navigation";
 import { Status } from "@/shared/enums/status";
+import { PageHeader } from "@/shared/ui";
 
 interface EditPersonProps {
   params: Promise<{ id: string }>;
@@ -109,9 +110,7 @@ export default function EditPersonPage({ params }: EditPersonProps) {
   return (
     <MainLayout>
       <div className="max-w-2xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Edit Person</h2>
-        </div>
+        <PageHeader title="Edit Person" />
 
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg p-6 shadow-sm">
           {loading ? (

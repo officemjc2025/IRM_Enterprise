@@ -34,7 +34,7 @@ function mapToUnit(row: UnitDbRow): Unit {
     unit_number: row.unit_number,
     area: Number(row.area),
     ownership_ratio: Number(row.ownership_ratio),
-    status: (row.status || "active").toLowerCase() as Status,
+    status: (row.status || "ACTIVE").toUpperCase() as Status,
     created_at: row.created_at,
     updated_at: row.updated_at,
     created_by: row.created_by,
@@ -142,7 +142,7 @@ export async function archive(id: string): Promise<boolean> {
     .from("unit")
     .update({
       deleted_at: new Date().toISOString(),
-      status: "inactive"
+      status: "INACTIVE"
     })
     .eq("id", id);
 
