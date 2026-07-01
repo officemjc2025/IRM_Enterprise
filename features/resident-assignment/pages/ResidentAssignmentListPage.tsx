@@ -7,6 +7,15 @@ import { ResidentAssignment } from "../types/resident-assignment.types";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { useDebounce, usePagination, useSorting, useFilter } from "@/features/unit/hooks";
 import { PageHeader, SearchInput, EmptyState, LoadingState } from "@/shared/ui";
+import { Unit } from "@/features/unit/types/unit.types";
+
+interface UnitWithProperties extends Unit {
+  properties?: {
+    id: string;
+    property_name_th: string;
+    property_name_en: string | null;
+  } | null;
+}
 
 function ResidentAssignmentListInner() {
   const { t, language } = useLanguage();
@@ -17,6 +26,10 @@ function ResidentAssignmentListInner() {
 
   const { sortBy, sortOrder, setSorting } = useSorting("move_in_date", "desc");
   const { status: statusFilter, setFilter } = useFilter("all");
+
+  const [properties, setProperties] = useState<{ id: string; property_name_th: string; property_name_en: string | null }[]>([]);
+  const [propertyFilter, setPropertyFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
 
   const fetchAssignments = async () => {
     try {
@@ -33,8 +46,20 @@ function ResidentAssignmentListInner() {
   };
 
   useEffect(() => {
+    const loadOptions = async () => {
+      try {
+        const res = await fetch("/api/v1/properties");
+        const json = await res.json();
+        if (json.success) {
+          setProperties(json.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch properties:", err);
+      }
+    };
     queueMicrotask(() => {
       fetchAssignments();
+      loadOptions();
     });
   }, []);
 
@@ -51,7 +76,7 @@ function ResidentAssignmentListInner() {
     }
   };
 
-  // 1. Search Filter Step
+  // 1. Search Filter Step (including person_code)
   const searchedAssignments = assignments.filter((a) => {
     const term = debouncedSearchTerm.toLowerCase().trim();
     if (!term) return true;
@@ -60,14 +85,17 @@ function ResidentAssignmentListInner() {
     const name = a.person
       ? `${a.person.first_name} ${a.person.last_name || ""} ${a.person.display_name || ""}`.toLowerCase()
       : "";
+    const personCode = a.person?.person_code?.toLowerCase() || "";
 
-    return unitNum.includes(term) || name.includes(term);
+    return unitNum.includes(term) || name.includes(term) || personCode.includes(term);
   });
 
-  // 2. Status Filter Step
+  // 2. Status, Occupancy Type, and Property Filters Step
   const filteredAssignments = searchedAssignments.filter((a) => {
-    if (statusFilter === "all") return true;
-    return a.status.toUpperCase() === statusFilter.toUpperCase();
+    const matchesStatus = statusFilter === "all" || a.status.toUpperCase() === statusFilter.toUpperCase();
+    const matchesType = !typeFilter || a.occupancy_type === typeFilter;
+    const matchesProperty = !propertyFilter || a.unit?.property_id === propertyFilter;
+    return matchesStatus && matchesType && matchesProperty;
   });
 
   // 3. Sort Step
@@ -148,7 +176,40 @@ function ResidentAssignmentListInner() {
             />
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <select
+              value={propertyFilter}
+              onChange={(e) => {
+                setPropertyFilter(e.target.value);
+                setPage(1);
+              }}
+              className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-medium text-slate-600 dark:text-slate-300 outline-none cursor-pointer"
+            >
+              <option value="">{language === "en" ? "All Properties" : "ทุกโครงการ"}</option>
+              {properties.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {language === "en" ? (p.property_name_en || p.property_name_th) : p.property_name_th}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={typeFilter}
+              onChange={(e) => {
+                setTypeFilter(e.target.value);
+                setPage(1);
+              }}
+              className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-medium text-slate-600 dark:text-slate-300 outline-none cursor-pointer"
+            >
+              <option value="">{language === "en" ? "All Types" : "ทุกประเภท"}</option>
+              <option value="OWNER">OWNER</option>
+              <option value="CO_OWNER">CO_OWNER</option>
+              <option value="TENANT">TENANT</option>
+              <option value="RESIDENT">RESIDENT</option>
+              <option value="COMPANY">COMPANY</option>
+              <option value="VACANT">VACANT</option>
+            </select>
+
             <select
               value={statusFilter}
               onChange={(e) => setFilter(e.target.value)}
@@ -175,6 +236,9 @@ function ResidentAssignmentListInner() {
                     <th className="p-4 cursor-pointer hover:bg-slate-100/50 dark:hover:bg-slate-900/60" onClick={() => setSorting("unit_id")}>
                       {t.residentAssignment.unit} {sortBy === "unit_id" && (sortOrder === "asc" ? "▲" : "▼")}
                     </th>
+                    <th className="p-4">
+                      {language === "en" ? "Property" : "โครงการ"}
+                    </th>
                     <th className="p-4 cursor-pointer hover:bg-slate-100/50 dark:hover:bg-slate-900/60" onClick={() => setSorting("person_id")}>
                       {t.residentAssignment.residentName} {sortBy === "person_id" && (sortOrder === "asc" ? "▲" : "▼")}
                     </th>
@@ -197,6 +261,9 @@ function ResidentAssignmentListInner() {
                     <tr key={a.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
                       <td className="p-4 font-mono font-bold text-slate-700 dark:text-slate-300">
                         {a.unit?.unit_number || "-"}
+                      </td>
+                      <td className="p-4 text-slate-600 dark:text-slate-400 font-medium">
+                        {(a.unit as UnitWithProperties | null | undefined)?.properties ? (language === "en" ? ((a.unit as UnitWithProperties).properties?.property_name_en || (a.unit as UnitWithProperties).properties?.property_name_th) : (a.unit as UnitWithProperties).properties?.property_name_th) : "-"}
                       </td>
                       <td className="p-4 font-semibold text-slate-800 dark:text-slate-200">
                         {a.person ? a.person.display_name || `${a.person.first_name} ${a.person.last_name || ""}` : "-"}

@@ -52,6 +52,26 @@ export default function CreateResidentAssignmentPage() {
     loadOptions();
   }, []);
 
+  const handleMoveOutDateChange = (val: string) => {
+    setMoveOutDate(val);
+    if (val && val.trim() !== "") {
+      setStatus(Status.INACTIVE);
+    } else {
+      setStatus(Status.ACTIVE);
+    }
+  };
+
+  const handleStatusChange = (val: Status) => {
+    setStatus(val);
+    if (val === Status.INACTIVE) {
+      if (!moveOutDate || moveOutDate.trim() === "") {
+        setMoveOutDate(new Date().toISOString().split("T")[0]);
+      }
+    } else if (val === Status.ACTIVE) {
+      setMoveOutDate("");
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -199,7 +219,7 @@ export default function CreateResidentAssignmentPage() {
                 <input
                   type="date"
                   value={moveOutDate}
-                  onChange={(e) => setMoveOutDate(e.target.value)}
+                  onChange={(e) => handleMoveOutDateChange(e.target.value)}
                   className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none"
                 />
               </div>
@@ -212,7 +232,7 @@ export default function CreateResidentAssignmentPage() {
               </label>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value as Status)}
+                onChange={(e) => handleStatusChange(e.target.value as Status)}
                 className="p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none cursor-pointer"
               >
                 <option value="ACTIVE">{t.common.active}</option>

@@ -54,8 +54,16 @@ export const residentAssignmentService = {
     const unitId = dto.unit_id !== undefined ? dto.unit_id : existing.unit_id;
     
     let newStatus = dto.status !== undefined ? dto.status : existing.status;
-    if (dto.move_out_date !== undefined && dto.move_out_date !== null && dto.move_out_date.trim() !== "") {
+    let newMoveOutDate = dto.move_out_date !== undefined ? dto.move_out_date : existing.move_out_date;
+
+    if (dto.status === Status.INACTIVE || (dto.move_out_date !== undefined && dto.move_out_date !== null && dto.move_out_date.trim() !== "")) {
       newStatus = Status.INACTIVE;
+      if (!newMoveOutDate || newMoveOutDate.trim() === "") {
+        newMoveOutDate = new Date().toISOString().split("T")[0];
+      }
+    } else if (dto.status === Status.ACTIVE) {
+      newStatus = Status.ACTIVE;
+      newMoveOutDate = null;
     }
 
     if (newStatus === Status.ACTIVE) {
@@ -65,10 +73,11 @@ export const residentAssignmentService = {
       }
     }
 
-    const payload = { ...dto };
-    if (dto.move_out_date !== undefined && dto.move_out_date !== null && dto.move_out_date.trim() !== "") {
-      payload.status = Status.INACTIVE;
-    }
+    const payload: UpdateResidentAssignmentDto = {
+      ...dto,
+      status: newStatus,
+      move_out_date: newMoveOutDate,
+    };
 
     return residentAssignmentRepository.update(id, payload);
   },

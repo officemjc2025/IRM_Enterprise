@@ -58,8 +58,8 @@ export async function findAll(): Promise<ResidentAssignment[]> {
     .from("resident_assignments")
     .select(`
       *,
-      unit:unit_id (unit_number, building_code, floor),
-      person:person_id (first_name, last_name, display_name)
+      unit:unit_id (id, unit_number, building_code, floor, property_id, properties(*)),
+      person:person_id (id, first_name, last_name, display_name, person_code)
     `)
     .is("deleted_at", null);
 

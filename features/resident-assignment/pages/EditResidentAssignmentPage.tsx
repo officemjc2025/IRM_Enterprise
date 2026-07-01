@@ -75,6 +75,19 @@ export default function EditResidentAssignmentPage({ params }: EditResidentAssig
     setMoveOutDate(val);
     if (val && val.trim() !== "") {
       setStatus(Status.INACTIVE);
+    } else {
+      setStatus(Status.ACTIVE);
+    }
+  };
+
+  const handleStatusChange = (val: Status) => {
+    setStatus(val);
+    if (val === Status.INACTIVE) {
+      if (!moveOutDate || moveOutDate.trim() === "") {
+        setMoveOutDate(new Date().toISOString().split("T")[0]);
+      }
+    } else if (val === Status.ACTIVE) {
+      setMoveOutDate("");
     }
   };
 
@@ -241,7 +254,7 @@ export default function EditResidentAssignmentPage({ params }: EditResidentAssig
                 </label>
                 <select
                   value={status}
-                  onChange={(e) => setStatus(e.target.value as Status)}
+                  onChange={(e) => handleStatusChange(e.target.value as Status)}
                   className="p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none cursor-pointer"
                 >
                   <option value="ACTIVE">{t.common.active}</option>
