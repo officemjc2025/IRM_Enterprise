@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Unit } from "../types/unit.types";
 import { Occupancy } from "@/features/occupancy/types/occupancy.types";
 import { useLanguage } from "@/providers/LanguageProvider";
+import { PageHeader } from "@/shared/ui";
 
 interface ViewUnitProps {
   params: Promise<{ id: string }>;
@@ -66,7 +67,7 @@ export default function ViewUnitPage({ params }: ViewUnitProps) {
     <MainLayout>
       <div className="max-w-2xl mx-auto space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold">{t.unit.details}</h2>
+          <PageHeader title={t.unit.details} />
           <button
             onClick={() => router.push("/units")}
             className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm transition"

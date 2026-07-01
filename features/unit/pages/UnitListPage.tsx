@@ -1,18 +1,22 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import Link from "next/link";
 import { Unit } from "../types/unit.types";
 import { useLanguage } from "@/providers/LanguageProvider";
+import { useDebounce, usePagination, useSorting, useFilter } from "../hooks";
+import { PageHeader, SearchInput, EmptyState, LoadingState } from "@/shared/ui";
 
-export default function UnitListPage() {
-  const { t } = useLanguage();
+function UnitListInner() {
+  const { t, language } = useLanguage();
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
+
+  const { sortBy, sortOrder, setSorting } = useSorting("unit_number", "asc");
+  const { status, setFilter } = useFilter("all");
 
   const fetchUnits = async () => {
     try {
@@ -47,61 +51,123 @@ export default function UnitListPage() {
     }
   };
 
-  const filteredUnits = units.filter((u) => {
-    const term = search.toLowerCase();
+  // 1. Search Filter Step
+  const searchedUnits = units.filter((u) => {
+    const term = debouncedSearchTerm.toLowerCase().trim();
+    if (!term) return true;
     return (
       u.unit_number.toLowerCase().includes(term) ||
-      u.building_code.toLowerCase().includes(term) ||
+      (u.building_code && u.building_code.toLowerCase().includes(term)) ||
       u.floor.toLowerCase().includes(term)
     );
   });
 
-  const totalPages = Math.ceil(filteredUnits.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedUnits = filteredUnits.slice(startIndex, startIndex + itemsPerPage);
+  // 2. Status Filter Step
+  const filteredUnits = searchedUnits.filter((u) => {
+    if (status === "all") return true;
+    return u.status.toLowerCase() === status.toLowerCase();
+  });
+
+  // 3. Sort Step
+  const sortedUnits = [...filteredUnits].sort((a, b) => {
+    const valA = a[sortBy as keyof Unit] ?? "";
+    const valB = b[sortBy as keyof Unit] ?? "";
+
+    if (typeof valA === "number" && typeof valB === "number") {
+      return sortOrder === "asc" ? valA - valB : valB - valA;
+    }
+
+    const strA = String(valA).toLowerCase();
+    const strB = String(valB).toLowerCase();
+
+    if (strA < strB) return sortOrder === "asc" ? -1 : 1;
+    if (strA > strB) return sortOrder === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  // 4. Pagination Step
+  const {
+    currentPage,
+    pageSize,
+    totalPages,
+    startIndex,
+    endIndex,
+    setPageSize,
+    nextPage,
+    prevPage,
+    firstPage,
+    lastPage,
+  } = usePagination(sortedUnits.length);
+
+  const sliceStart = (currentPage - 1) * pageSize;
+  const sliceEnd = sliceStart + pageSize;
+  const paginatedUnits = sortedUnits.slice(sliceStart, sliceEnd);
+
+  const renderSortableHeader = (label: string, key: string) => {
+    const isSorted = sortBy === key;
+    return (
+      <th
+        onClick={() => setSorting(key)}
+        className="p-4 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition select-none font-semibold text-slate-600 dark:text-slate-300"
+      >
+        <div className="flex items-center gap-1">
+          <span>{label}</span>
+          <span className="text-slate-400 text-xs">
+            {isSorted ? (sortOrder === "asc" ? "▲" : "▼") : "↕"}
+          </span>
+        </div>
+      </th>
+    );
+  };
 
   return (
     <MainLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">{t.unit.title}</h2>
-          <Link
-            href="/units/create"
-            className="px-4 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-medium"
-          >
-            {t.unit.createUnit}
-          </Link>
-        </div>
+        <PageHeader
+          title={t.unit.title}
+          actionHref="/units/create"
+          actionLabel={t.unit.createUnit}
+        />
 
-        <div className="flex items-center gap-4">
-          <input
-            type="text"
-            placeholder={t.unit.searchPlaceholder}
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="flex-1 max-w-md p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm"
-          />
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex-1">
+            <SearchInput
+              placeholder={t.unit.searchPlaceholder}
+              value={searchTerm}
+              onChange={setSearchTerm}
+            />
+          </div>
+          <div className="sm:w-48">
+            <select
+              value={status}
+              onChange={(e) => setFilter(e.target.value)}
+              className="w-full h-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm shadow-sm outline-none cursor-pointer"
+            >
+              <option value="all">{language === "en" ? "All Statuses" : "ทุกสถานะ"}</option>
+              <option value="active">{language === "en" ? "Active" : "ใช้งานอยู่"}</option>
+              <option value="inactive">{language === "en" ? "Inactive" : "ไม่ได้ใช้งาน"}</option>
+            </select>
+          </div>
         </div>
 
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden">
           {loading ? (
-            <div className="p-6 text-center text-slate-500">{t.common.loading}</div>
+            <LoadingState message={t.common.loading} />
           ) : paginatedUnits.length === 0 ? (
-            <div className="p-6 text-center text-slate-500">{t.unit.noUnitsFound}</div>
+            <EmptyState message={t.unit.noUnitsFound} />
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                  <th className="p-4">{t.unit.unitNumber}</th>
-                  <th className="p-4">{t.unit.buildingCode}</th>
-                  <th className="p-4">{t.unit.floor}</th>
-                  <th className="p-4">{t.unit.area}</th>
-                  <th className="p-4">{t.unit.ownershipRatio}</th>
-                  <th className="p-4">{t.common.status}</th>
-                  <th className="p-4 text-right">{t.common.actions}</th>
+                <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm">
+                  {renderSortableHeader(t.unit.unitNumber, "unit_number")}
+                  {renderSortableHeader(t.unit.buildingCode, "building_code")}
+                  {renderSortableHeader(t.unit.floor, "floor")}
+                  {renderSortableHeader(t.unit.area, "area")}
+                  {renderSortableHeader(t.unit.ownershipRatio, "ownership_ratio")}
+                  {renderSortableHeader(t.common.status, "status")}
+                  <th className="p-4 text-right font-semibold text-slate-600 dark:text-slate-300">
+                    {t.common.actions}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700 text-sm">
@@ -113,20 +179,16 @@ export default function UnitListPage() {
                     <td className="p-4">{u.area} sqm</td>
                     <td className="p-4">{(u.ownership_ratio * 100).toFixed(4)}%</td>
                     <td className="p-4">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                          u.status === "active"
-                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                        }`}
-                      >
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                        u.status === "active" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                      }`}>
                         {u.status}
                       </span>
                     </td>
                     <td className="p-4 text-right space-x-2">
                       <Link
                         href={`/units/${u.id}`}
-                        className="text-slate-600 hover:text-slate-955 dark:text-slate-400"
+                        className="text-slate-600 hover:text-slate-900 dark:text-slate-400"
                       >
                         {t.common.view}
                       </Link>
@@ -150,44 +212,69 @@ export default function UnitListPage() {
           )}
         </div>
 
-        {totalPages > 1 && (
-          <div className="flex justify-between items-center text-sm text-slate-500">
-            <div>
-              {t.common.showing} {startIndex + 1} {t.common.to} {Math.min(startIndex + itemsPerPage, filteredUnits.length)} {t.common.of}{" "}
-              {filteredUnits.length} {t.unit.items}
+        {/* Pagination Controls */}
+        {!loading && sortedUnits.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg p-4 shadow-sm text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-500">Show:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
+                className="p-1 border border-slate-200 dark:border-slate-700 rounded dark:bg-slate-900 outline-none cursor-pointer"
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+              </select>
+              <span className="text-slate-500 ml-2">
+                {t.common.showing} {startIndex}–{endIndex} {t.common.of} {sortedUnits.length} {t.unit.items}
+              </span>
             </div>
-            <div className="flex space-x-1">
+
+            <div className="flex items-center gap-1.5">
               <button
+                onClick={firstPage}
                 disabled={currentPage === 1}
-                onClick={() => setCurrentPage((c) => c - 1)}
-                className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg disabled:opacity-50"
+                className="px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition"
               >
-                {t.common.previous}
+                First
               </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className={`px-3 py-1 rounded-lg border ${
-                    currentPage === page
-                      ? "bg-[#D4AF37] border-[#D4AF37] text-white"
-                      : "border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800"
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
               <button
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((c) => c + 1)}
-                className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg disabled:opacity-50"
+                onClick={prevPage}
+                disabled={currentPage === 1}
+                className="px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition"
               >
-                {t.common.next}
+                Previous
+              </button>
+              <span className="px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-semibold text-slate-800 dark:text-slate-200">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                onClick={nextPage}
+                disabled={currentPage === totalPages}
+                className="px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition"
+              >
+                Next
+              </button>
+              <button
+                onClick={lastPage}
+                disabled={currentPage === totalPages}
+                className="px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition"
+              >
+                Last
               </button>
             </div>
           </div>
         )}
       </div>
     </MainLayout>
+  );
+}
+
+export default function UnitListPage() {
+  return (
+    <Suspense fallback={<MainLayout><div className="p-6 text-center text-slate-500">Loading pagination context...</div></MainLayout>}>
+      <UnitListInner />
+    </Suspense>
   );
 }
