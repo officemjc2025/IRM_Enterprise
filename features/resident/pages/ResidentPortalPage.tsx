@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Person } from "@/features/person/types/person.types";
 import { ResidentAssignment } from "@/features/resident-assignment/types/resident-assignment.types";
 import { Unit } from "@/features/unit/types/unit.types";
+import { Announcement } from "@/features/announcement/types/announcement.types";
 
 interface PropertyDetails {
   id: string;
@@ -17,6 +18,7 @@ interface PropertyDetails {
 
 interface UnitWithPropertyDetails extends Unit {
   properties?: PropertyDetails | null;
+  property_id: string;
 }
 
 interface PortalAssignment extends Omit<ResidentAssignment, "unit"> {
@@ -39,20 +41,33 @@ export default function ResidentPortalPage() {
   const [impersonateEmail, setImpersonateEmail] = useState("");
   const [activeImpersonation, setActiveImpersonation] = useState("");
 
+  // Announcements State
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+
   const fetchData = async (emailToImpersonate?: string) => {
     try {
       setLoading(true);
       setError("");
-      let url = "/api/v1/resident/portal";
+      
+      let portalUrl = "/api/v1/resident/portal";
       if (emailToImpersonate && emailToImpersonate.trim() !== "") {
-        url += `?impersonate=${encodeURIComponent(emailToImpersonate.trim())}`;
+        portalUrl += `?impersonate=${encodeURIComponent(emailToImpersonate.trim())}`;
       }
-      const res = await fetch(url);
+      
+      const res = await fetch(portalUrl);
       const json = await res.json();
       if (json.success) {
         setData(json.data);
       } else {
         setError(json.message || "Failed to retrieve resident details");
+      }
+
+      // Fetch Announcements
+      const annRes = await fetch("/api/v1/announcements?published_only=true");
+      const annJson = await annRes.json();
+      if (annJson.success) {
+        setAnnouncements(annJson.data);
       }
     } catch (err) {
       console.error("Error fetching resident portal data:", err);
@@ -87,6 +102,15 @@ export default function ResidentPortalPage() {
   };
 
   const isAdmin = data?.role === "admin" || data?.role === "super_admin" || data?.role === "property_admin";
+
+  // Filter announcements matching the resident's property scope
+  const targetPropertyId = data?.assignment?.unit?.property_id;
+  const filteredAnnouncements = announcements
+    .filter((ann) => {
+      if (!ann.property_id) return true; // Show global announcements to everyone
+      return ann.property_id === targetPropertyId; // Match property assignment
+    })
+    .slice(0, 5); // Limit to top 5
 
   return (
     <MainLayout>
@@ -261,6 +285,58 @@ export default function ResidentPortalPage() {
               </div>
             </div>
 
+            {/* Latest Announcements Section */}
+            <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-2">
+                <h4 className="font-bold text-slate-800 dark:text-slate-200 text-base">
+                  📢 {language === "en" ? "Latest Announcements" : "ข่าวประกาศล่าสุด"}
+                </h4>
+              </div>
+              {filteredAnnouncements.length === 0 ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500 text-center py-6">
+                  {language === "en" ? "No announcements published." : "ไม่มีข้อมูลข่าวประกาศเผยแพร่"}
+                </p>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                  {filteredAnnouncements.map((ann) => (
+                    <div
+                      key={ann.id}
+                      onClick={() => setSelectedAnnouncement(ann)}
+                      className="py-3 flex justify-between items-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/30 px-2 rounded-lg transition"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          {ann.is_pinned && (
+                            <span className="text-sm" title="Pinned Announcement">📌</span>
+                          )}
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm hover:text-[#D4AF37] dark:hover:text-[#D4AF37] transition">
+                            {ann.title}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded font-bold text-[9px] uppercase ${
+                            ann.priority === "URGENT"
+                              ? "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400"
+                              : ann.priority === "HIGH"
+                              ? "bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-400"
+                              : ann.priority === "NORMAL"
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-400"
+                              : "bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-400"
+                          }`}>
+                            {ann.priority}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400 dark:text-slate-500 line-clamp-1 max-w-xl">
+                          {ann.content}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">
+                        {ann.publish_at ? new Date(ann.publish_at).toLocaleDateString() : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Information Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Card 1: My Property */}
@@ -372,6 +448,65 @@ export default function ResidentPortalPage() {
           </div>
         )}
       </div>
+
+      {/* Announcement Modal Overlay */}
+      {selectedAnnouncement && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-200">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-xl w-full shadow-2xl p-6 relative flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            {/* Top Close Button */}
+            <button
+              onClick={() => setSelectedAnnouncement(null)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg outline-none font-bold"
+              aria-label="Close modal"
+            >
+              ✕
+            </button>
+
+            {/* Modal Header */}
+            <div className="space-y-2 pr-6">
+              <div className="flex items-center gap-2 flex-wrap">
+                {selectedAnnouncement.is_pinned && (
+                  <span className="text-sm">📌 Pinned</span>
+                )}
+                <span className={`px-2 py-0.5 rounded font-bold text-[10px] uppercase ${
+                  selectedAnnouncement.priority === "URGENT"
+                    ? "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400"
+                    : selectedAnnouncement.priority === "HIGH"
+                    ? "bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-400"
+                    : selectedAnnouncement.priority === "NORMAL"
+                    ? "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-400"
+                    : "bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-400"
+                }`}>
+                  {selectedAnnouncement.priority} Priority
+                </span>
+                <span className="text-xs text-slate-400 dark:text-slate-500 font-mono">
+                  {selectedAnnouncement.publish_at ? new Date(selectedAnnouncement.publish_at).toLocaleString() : ""}
+                </span>
+              </div>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 leading-snug">
+                {selectedAnnouncement.title}
+              </h3>
+            </div>
+
+            {/* Modal Content */}
+            <div className="border-t border-b border-slate-100 dark:border-slate-700 py-4 max-h-[300px] overflow-y-auto">
+              <p className="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
+                {selectedAnnouncement.content}
+              </p>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setSelectedAnnouncement(null)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white dark:bg-slate-700 dark:hover:bg-slate-600 text-sm font-semibold rounded-lg transition"
+              >
+                {language === "en" ? "Close" : "ปิด"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </MainLayout>
   );
 }
