@@ -23,41 +23,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // Phase 1: APPROVED/CREATED -> CHECKED_IN
-    const visitorObj = await visitorService.getVisitorById(visitor_id);
-    if (!visitorObj) {
-      return NextResponse.json(
-        { success: false, message: "Visitor not found" },
-        { status: 404 }
-      );
-    }
-
-    // Auto-approve if status is CREATED when checking in (for flexibility)
-    if (visitorObj.status === "CREATED") {
-      await visitorService.updateVisitor(visitor_id, { status: "APPROVED", updated_by: user.id });
-    }
-
-    // Transition to CHECKED_IN
+    // Phase 1: INSIDE -> CHECKED_OUT
     await visitorService.updateVisitor(visitor_id, {
-      status: "CHECKED_IN",
+      status: "CHECKED_OUT",
       updated_by: user.id,
-      check_in_time: new Date().toISOString(),
-      security_user: user.email || user.id,
+      actual_checkout_time: new Date().toISOString(),
     });
 
-    // Phase 2: CHECKED_IN -> INSIDE
+    // Phase 2: CHECKED_OUT -> CLOSED
     const updatedVisitor = await visitorService.updateVisitor(visitor_id, {
-      status: "INSIDE",
+      status: "CLOSED",
       updated_by: user.id,
     });
 
     return NextResponse.json({
       success: true,
-      message: "Visitor checked in successfully",
+      message: "Visitor checked out successfully",
       data: updatedVisitor,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to check in visitor";
+    const message = error instanceof Error ? error.message : "Failed to check out visitor";
     return NextResponse.json(
       { success: false, message },
       { status: 400 }

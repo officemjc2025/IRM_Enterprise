@@ -8,6 +8,7 @@ import { Person } from "@/features/person/types/person.types";
 import { ResidentAssignment } from "@/features/resident-assignment/types/resident-assignment.types";
 import { Unit } from "@/features/unit/types/unit.types";
 import { Announcement } from "@/features/announcement/types/announcement.types";
+import { Visitor } from "@/features/visitor/types/visitor.types";
 
 interface PropertyDetails {
   id: string;
@@ -45,6 +46,21 @@ export default function ResidentPortalPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
 
+  // Visitors State
+  const [visitors, setVisitors] = useState<Visitor[]>([]);
+  const [visitorTab, setVisitorTab] = useState<"UPCOMING" | "TODAY" | "HISTORY">("TODAY");
+  
+  // Visitor Request Form Modal State
+  const [showVisitorModal, setShowVisitorModal] = useState(false);
+  const [visitorName, setVisitorName] = useState("");
+  const [visitorPhone, setVisitorPhone] = useState("");
+  const [vehiclePlate, setVehiclePlate] = useState("");
+  const [visitDate, setVisitDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [expectedArrival, setExpectedArrival] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [visitorError, setVisitorError] = useState("");
+  const [visitorSaving, setVisitorSaving] = useState(false);
+
   const fetchData = async (emailToImpersonate?: string) => {
     try {
       setLoading(true);
@@ -69,6 +85,18 @@ export default function ResidentPortalPage() {
       if (annJson.success) {
         setAnnouncements(annJson.data);
       }
+
+      // Fetch Visitors
+      const [qRes, hRes] = await Promise.all([
+        fetch("/api/v1/visitors?filter=queue"),
+        fetch("/api/v1/visitors?filter=history"),
+      ]);
+      const qJson = await qRes.json();
+      const hJson = await hRes.json();
+      let allVisitors: Visitor[] = [];
+      if (qJson.success) allVisitors = allVisitors.concat(qJson.data);
+      if (hJson.success) allVisitors = allVisitors.concat(hJson.data);
+      setVisitors(allVisitors);
     } catch (err) {
       console.error("Error fetching resident portal data:", err);
       setError("An unexpected error occurred while loading your residence details.");
@@ -101,6 +129,81 @@ export default function ResidentPortalPage() {
     return language === "en" ? p.property_name_en || p.property_name_th : p.property_name_th;
   };
 
+  const handleCancelVisitor = async (id: string) => {
+    if (!confirm(language === "en" ? "Are you sure you want to cancel this visitor request?" : "คุณแน่ใจหรือไม่ว่าต้องการยกเลิกคำขอผู้มาติดต่อนี้?")) return;
+    try {
+      const res = await fetch(`/api/v1/visitors/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "CANCELLED" }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        fetchData(activeImpersonation);
+      } else {
+        alert(json.message || "Failed to cancel request");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleVisitorSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setVisitorError("");
+    setVisitorSaving(true);
+
+    if (!data?.assignment) {
+      setVisitorError("No active residence assignment resolved.");
+      setVisitorSaving(false);
+      return;
+    }
+
+    try {
+      let isoExpectedArrival = null;
+      if (expectedArrival) {
+        isoExpectedArrival = new Date(`${visitDate}T${expectedArrival}`).toISOString();
+      }
+
+      const payload = {
+        resident_assignment_id: data.assignment.id,
+        visitor_name: visitorName.trim(),
+        phone: visitorPhone.trim() || null,
+        vehicle_plate: vehiclePlate.trim() || null,
+        visit_date: visitDate,
+        expected_arrival: isoExpectedArrival,
+        purpose: purpose.trim() || null,
+      };
+
+      const res = await fetch("/api/v1/visitors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        setShowVisitorModal(false);
+        // Clear form
+        setVisitorName("");
+        setVisitorPhone("");
+        setVehiclePlate("");
+        setVisitDate(new Date().toISOString().split("T")[0]);
+        setExpectedArrival("");
+        setPurpose("");
+        // Reload
+        fetchData(activeImpersonation);
+      } else {
+        setVisitorError(json.message || "Failed to submit request");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred";
+      setVisitorError(msg);
+    } finally {
+      setVisitorSaving(false);
+    }
+  };
+
   const isAdmin = data?.role === "admin" || data?.role === "super_admin" || data?.role === "property_admin";
 
   // Filter announcements matching the resident's property scope
@@ -111,6 +214,18 @@ export default function ResidentPortalPage() {
       return ann.property_id === targetPropertyId; // Match property assignment
     })
     .slice(0, 5); // Limit to top 5
+
+  // Filter visitors by tab groups
+  const todayStr = new Date().toISOString().split("T")[0];
+  const tabVisitors = visitors.filter((v) => {
+    if (visitorTab === "TODAY") {
+      return v.visit_date === todayStr && v.status !== "CLOSED" && v.status !== "CANCELLED";
+    } else if (visitorTab === "UPCOMING") {
+      return v.visit_date > todayStr && v.status !== "CLOSED" && v.status !== "CANCELLED";
+    } else {
+      return v.status === "CLOSED" || v.status === "CANCELLED" || v.visit_date < todayStr;
+    }
+  });
 
   return (
     <MainLayout>
@@ -337,6 +452,105 @@ export default function ResidentPortalPage() {
               )}
             </div>
 
+            {/* My Visitors Section */}
+            <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-6 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 dark:border-slate-700 pb-4">
+                <div className="space-y-1">
+                  <h4 className="font-bold text-slate-800 dark:text-slate-200 text-base">
+                    🚗 {language === "en" ? "My Visitors" : "ผู้มาติดต่อของฉัน"}
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    {language === "en" ? "Manage and request gate pass access codes." : "ขอรหัสอนุญาตผ่านทางประตูโครงการสำหรับผู้มาติดต่อ"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowVisitorModal(true)}
+                  className="px-4 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-semibold shadow-md shadow-[#D4AF37]/10 transition"
+                >
+                  {language === "en" ? "+ Request Pass" : "+ ขอรหัสผ่านทาง"}
+                </button>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex gap-2 border-b border-slate-100 dark:border-slate-700 pb-2">
+                {(["TODAY", "UPCOMING", "HISTORY"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setVisitorTab(tab)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      visitorTab === tab
+                        ? "bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold"
+                        : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    }`}
+                  >
+                    {tab === "TODAY"
+                      ? language === "en" ? "Today" : "วันนี้"
+                      : tab === "UPCOMING"
+                      ? language === "en" ? "Upcoming" : "ที่จะมาถึง"
+                      : language === "en" ? "History" : "ประวัติการติดต่อ"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Visitor List */}
+              {tabVisitors.length === 0 ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500 text-center py-8">
+                  {language === "en" ? "No visitor requests found." : "ไม่มีข้อมูลผู้มาติดต่อ"}
+                </p>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                  {tabVisitors.map((v) => (
+                    <div key={v.id} className="py-3.5 flex justify-between items-center text-sm gap-4">
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm">
+                            {v.visitor_name}
+                          </span>
+                          <span className="text-xs font-mono bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-slate-500 font-bold">
+                            {v.visitor_code}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded font-bold text-[9px] ${
+                            v.status === "CREATED"
+                              ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-400"
+                              : v.status === "APPROVED"
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-400"
+                              : v.status === "INSIDE" || v.status === "CHECKED_IN"
+                              ? "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-400"
+                              : "bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-500"
+                          }`}>
+                            {v.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-slate-400 dark:text-slate-500 flex-wrap">
+                          {v.phone && <span>📞 {v.phone}</span>}
+                          {v.vehicle_plate && <span>🚗 {v.vehicle_plate}</span>}
+                          <span>📅 {v.visit_date}</span>
+                          {v.expected_arrival && (
+                            <span>⏰ Expected: {new Date(v.expected_arrival).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          )}
+                        </div>
+                        {v.purpose && (
+                          <p className="text-xs text-slate-500 italic mt-1">
+                            {language === "en" ? "Purpose" : "วัตถุประสงค์"}: {v.purpose}
+                          </p>
+                        )}
+                      </div>
+                      
+                      {/* Cancel Request button (CREATED only) */}
+                      {v.status === "CREATED" && (
+                        <button
+                          onClick={() => handleCancelVisitor(v.id)}
+                          className="px-2.5 py-1 text-xs font-semibold text-red-500 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition"
+                        >
+                          {language === "en" ? "Cancel" : "ยกเลิก"}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Information Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Card 1: My Property */}
@@ -453,7 +667,6 @@ export default function ResidentPortalPage() {
       {selectedAnnouncement && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-200">
           <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-xl w-full shadow-2xl p-6 relative flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
-            {/* Top Close Button */}
             <button
               onClick={() => setSelectedAnnouncement(null)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg outline-none font-bold"
@@ -461,8 +674,6 @@ export default function ResidentPortalPage() {
             >
               ✕
             </button>
-
-            {/* Modal Header */}
             <div className="space-y-2 pr-6">
               <div className="flex items-center gap-2 flex-wrap">
                 {selectedAnnouncement.is_pinned && (
@@ -487,15 +698,11 @@ export default function ResidentPortalPage() {
                 {selectedAnnouncement.title}
               </h3>
             </div>
-
-            {/* Modal Content */}
             <div className="border-t border-b border-slate-100 dark:border-slate-700 py-4 max-h-[300px] overflow-y-auto">
               <p className="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
                 {selectedAnnouncement.content}
               </p>
             </div>
-
-            {/* Modal Footer */}
             <div className="flex justify-end pt-2">
               <button
                 onClick={() => setSelectedAnnouncement(null)}
@@ -504,6 +711,141 @@ export default function ResidentPortalPage() {
                 {language === "en" ? "Close" : "ปิด"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Visitor Request Pass Modal */}
+      {showVisitorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-200">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-md w-full shadow-2xl p-6 relative flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            <button
+              onClick={() => setShowVisitorModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg outline-none font-bold"
+              aria-label="Close modal"
+            >
+              ✕
+            </button>
+            
+            <div>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+                {language === "en" ? "Request Visitor Pass" : "ขอรหัสผ่านทางสำหรับผู้มาติดต่อ"}
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {language === "en" ? "Generate a code for your expected visitor." : "กรอกข้อมูลเพื่อรับรหัสผ่านทางสำหรับผู้ที่จะเข้ามาพบคุณ"}
+              </p>
+            </div>
+
+            <form onSubmit={handleVisitorSubmit} className="space-y-4">
+              {visitorError && (
+                <div className="p-3 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded-lg text-sm">
+                  {visitorError}
+                </div>
+              )}
+
+              {/* Visitor Name */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  {language === "en" ? "Visitor Name" : "ชื่อผู้มาติดต่อ"}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={visitorName}
+                  onChange={(e) => setVisitorName(e.target.value)}
+                  placeholder="John Doe"
+                  className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none"
+                />
+              </div>
+
+              {/* Phone */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  {language === "en" ? "Phone Number" : "เบอร์โทรศัพท์"}
+                </label>
+                <input
+                  type="text"
+                  value={visitorPhone}
+                  onChange={(e) => setVisitorPhone(e.target.value)}
+                  placeholder="0812345678"
+                  className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none"
+                />
+              </div>
+
+              {/* Vehicle Plate */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  {language === "en" ? "Vehicle Plate" : "ทะเบียนรถ"}
+                </label>
+                <input
+                  type="text"
+                  value={vehiclePlate}
+                  onChange={(e) => setVehiclePlate(e.target.value)}
+                  placeholder="กข 1234"
+                  className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none"
+                />
+              </div>
+
+              {/* Visit Date & Expected Time */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {language === "en" ? "Visit Date" : "วันที่มาติดต่อ"}
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={visitDate}
+                    onChange={(e) => setVisitDate(e.target.value)}
+                    className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {language === "en" ? "Expected Arrival" : "เวลาที่คาดว่าจะมาถึง"}
+                  </label>
+                  <input
+                    type="time"
+                    value={expectedArrival}
+                    onChange={(e) => setExpectedArrival(e.target.value)}
+                    className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Purpose */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  {language === "en" ? "Purpose of Visit" : "วัตถุประสงค์"}
+                </label>
+                <input
+                  type="text"
+                  value={purpose}
+                  onChange={(e) => setPurpose(e.target.value)}
+                  placeholder={language === "en" ? "e.g. Delivery, Friend, Maintenance" : "เช่น ส่งอาหาร, เยี่ยมเพื่อน, ซ่อมไฟ"}
+                  className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none"
+                />
+              </div>
+
+              {/* Submit buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700/60">
+                <button
+                  type="button"
+                  onClick={() => setShowVisitorModal(false)}
+                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                >
+                  {t.common.cancel}
+                </button>
+                <button
+                  type="submit"
+                  disabled={visitorSaving}
+                  className="px-5 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-semibold shadow-md shadow-[#D4AF37]/10 disabled:opacity-50 transition"
+                >
+                  {visitorSaving ? t.common.processing : t.common.save}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

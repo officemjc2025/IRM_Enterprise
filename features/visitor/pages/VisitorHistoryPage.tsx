@@ -60,7 +60,7 @@ export default function VisitorHistoryPage() {
     const term = searchTerm.toLowerCase();
     return (
       v.visitor_name.toLowerCase().includes(term) ||
-      v.visitor_number.toLowerCase().includes(term) ||
+      v.visitor_code.toLowerCase().includes(term) ||
       (v.phone && v.phone.toLowerCase().includes(term)) ||
       (v.vehicle_plate && v.vehicle_plate.toLowerCase().includes(term)) ||
       v.unit?.unit_number.toLowerCase().includes(term)
@@ -120,14 +120,14 @@ export default function VisitorHistoryPage() {
                 {filtered.map((v) => (
                   <tr key={v.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
                     <td className="p-3">
-                      <div className="text-xs text-slate-400 font-mono">{v.visitor_number}</div>
+                      <div className="text-xs text-slate-400 font-mono">{v.visitor_code}</div>
                       <div className="font-semibold text-slate-800 dark:text-slate-200 mt-0.5">{v.visitor_name}</div>
                       {v.phone && <div className="text-[10px] text-slate-400 font-mono">{v.phone}</div>}
                     </td>
                     <td className="p-3 font-mono font-medium">{v.unit?.unit_number || "-"}</td>
                     <td className="p-3 font-mono">{v.vehicle_plate || "-"}</td>
                     <td className="p-3 text-xs">
-                      {new Date(v.check_in_time).toLocaleString()}
+                      {v.check_in_time ? new Date(v.check_in_time).toLocaleString() : "-"}
                     </td>
                     <td className="p-3">
                       <span

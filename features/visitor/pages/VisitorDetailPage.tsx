@@ -89,7 +89,7 @@ export default function VisitorDetailPage({ params }: VisitorDetailProps) {
                 </div>
                 <div className="text-center">
                   <span className="text-[10px] text-slate-400 font-mono font-bold block uppercase tracking-wider">
-                    {visitor.visitor_number}
+                    {visitor.visitor_code}
                   </span>
                   <h3 className="font-bold text-lg text-slate-800 dark:text-slate-200 mt-1">{visitor.visitor_name}</h3>
                   {visitor.phone && <p className="text-xs text-slate-400 font-mono mt-0.5">{visitor.phone}</p>}
@@ -127,9 +127,9 @@ export default function VisitorDetailPage({ params }: VisitorDetailProps) {
                   <span className="font-semibold text-slate-500">{t.visitor.securityOfficer}</span>
                   <span className="col-span-2 font-medium">{visitor.security_user || "-"}</span>
                 </div>
-                <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2 text-sm">
+                 <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2 text-sm">
                   <span className="font-semibold text-slate-500">{t.visitor.checkInTime}</span>
-                  <span className="col-span-2">{new Date(visitor.check_in_time).toLocaleString()}</span>
+                  <span className="col-span-2">{visitor.check_in_time ? new Date(visitor.check_in_time).toLocaleString() : "-"}</span>
                 </div>
                 <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2 text-sm">
                   <span className="font-semibold text-slate-500">{t.visitor.expectedOut}</span>
@@ -142,7 +142,7 @@ export default function VisitorDetailPage({ params }: VisitorDetailProps) {
                 {visitor.actual_checkout_time && (
                   <div className="grid grid-cols-3 border-b border-slate-100 dark:border-slate-700 pb-2 text-sm">
                     <span className="font-semibold text-slate-500">{t.visitor.checkedOutAt}</span>
-                    <span className="col-span-2">{new Date(visitor.actual_checkout_time).toLocaleString()}</span>
+                    <span className="col-span-2">{visitor.actual_checkout_time ? new Date(visitor.actual_checkout_time).toLocaleString() : "-"}</span>
                   </div>
                 )}
                 <div className="grid grid-cols-3 pb-2 text-sm">

@@ -37,6 +37,7 @@ export const navConfig: NavSection[] = [
       { id: "import", label: "Import Master Data", href: "/import", icon: IconDashboard },
       { id: "search", label: "Search", href: "/search", icon: IconVisitors },
       { id: "announcements", label: "Announcements", href: "/announcements", icon: IconDashboard },
+      { id: "security", label: "Security Dashboard", href: "/security", icon: IconVisitors },
     ]
   },
   {

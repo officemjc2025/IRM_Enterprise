@@ -494,7 +494,7 @@ export default function VisitorCheckInPage() {
             <div className="bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg p-4 text-left divide-y divide-slate-100 dark:divide-slate-800 text-xs">
               <div className="py-2 flex justify-between">
                 <span className="text-slate-400 font-medium">{t.visitor.visitorNumber}</span>
-                <span className="font-semibold font-mono text-[#D4AF37]">{createdVisitor.visitor_number}</span>
+                <span className="font-semibold font-mono text-[#D4AF37]">{createdVisitor.visitor_code}</span>
               </div>
               <div className="py-2 flex justify-between">
                 <span className="text-slate-400 font-medium">{t.visitor.visitorName}</span>
@@ -514,7 +514,7 @@ export default function VisitorCheckInPage() {
               </div>
               <div className="py-2 flex justify-between">
                 <span className="text-slate-400 font-medium">{t.visitor.checkInTime}</span>
-                <span className="font-semibold">{new Date(createdVisitor.check_in_time).toLocaleString()}</span>
+                <span className="font-semibold">{createdVisitor.check_in_time ? new Date(createdVisitor.check_in_time).toLocaleString() : "-"}</span>
               </div>
               <div className="py-2 flex justify-between">
                 <span className="text-slate-400 font-medium">{t.common.status}</span>
