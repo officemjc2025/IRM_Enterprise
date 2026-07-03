@@ -38,6 +38,7 @@ export const navConfig: NavSection[] = [
       { id: "search", label: "Search", href: "/search", icon: IconVisitors },
       { id: "announcements", label: "Announcements", href: "/announcements", icon: IconDashboard },
       { id: "security", label: "Security Dashboard", href: "/security", icon: IconVisitors },
+      { id: "work-orders", label: "Work Orders", href: "/work-orders", icon: IconDashboard },
     ]
   },
   {
