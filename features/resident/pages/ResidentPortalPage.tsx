@@ -9,6 +9,7 @@ import { ResidentAssignment } from "@/features/resident-assignment/types/residen
 import { Unit } from "@/features/unit/types/unit.types";
 import { Announcement } from "@/features/announcement/types/announcement.types";
 import { Visitor } from "@/features/visitor/types/visitor.types";
+import { WorkOrder } from "@/features/work-order/types/work-order.types";
 
 interface PropertyDetails {
   id: string;
@@ -61,6 +62,19 @@ export default function ResidentPortalPage() {
   const [visitorError, setVisitorError] = useState("");
   const [visitorSaving, setVisitorSaving] = useState(false);
 
+  // Work Orders State
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const [workOrderTab, setWorkOrderTab] = useState<"OPEN" | "COMPLETED" | "HISTORY">("OPEN");
+  
+  // Work Order Request Modal State
+  const [showWorkOrderModal, setShowWorkOrderModal] = useState(false);
+  const [workOrderTitle, setWorkOrderTitle] = useState("");
+  const [workOrderCategory, setWorkOrderCategory] = useState("Plumbing");
+  const [workOrderPriority, setWorkOrderPriority] = useState<"LOW" | "NORMAL" | "HIGH" | "URGENT">("NORMAL");
+  const [workOrderDescription, setWorkOrderDescription] = useState("");
+  const [workOrderError, setWorkOrderError] = useState("");
+  const [workOrderSaving, setWorkOrderSaving] = useState(false);
+
   const fetchData = async (emailToImpersonate?: string) => {
     try {
       setLoading(true);
@@ -97,6 +111,13 @@ export default function ResidentPortalPage() {
       if (qJson.success) allVisitors = allVisitors.concat(qJson.data);
       if (hJson.success) allVisitors = allVisitors.concat(hJson.data);
       setVisitors(allVisitors);
+
+      // Fetch Work Orders
+      const woRes = await fetch("/api/v1/work-orders");
+      const woJson = await woRes.json();
+      if (woJson.success) {
+        setWorkOrders(woJson.data);
+      }
     } catch (err) {
       console.error("Error fetching resident portal data:", err);
       setError("An unexpected error occurred while loading your residence details.");
@@ -204,6 +225,74 @@ export default function ResidentPortalPage() {
     }
   };
 
+  const handleCancelWorkOrder = async (id: string) => {
+    if (!confirm(language === "en" ? "Are you sure you want to cancel this work order?" : "คุณแน่ใจหรือไม่ว่าต้องการยกเลิกใบสั่งงานนี้?")) return;
+    try {
+      const res = await fetch(`/api/v1/work-orders/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "CANCELLED" }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        fetchData(activeImpersonation);
+      } else {
+        alert(json.message || "Failed to cancel work order");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleWorkOrderSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setWorkOrderError("");
+    setWorkOrderSaving(true);
+
+    if (!data?.assignment) {
+      setWorkOrderError("No active residence assignment resolved.");
+      setWorkOrderSaving(false);
+      return;
+    }
+
+    try {
+      const payload = {
+        category: workOrderCategory,
+        title: workOrderTitle.trim(),
+        description: workOrderDescription.trim() || null,
+        priority: workOrderPriority,
+        resident_assignment_id: data.assignment.id,
+        unit_id: data.assignment.unit_id,
+        property_id: data.assignment.unit?.property_id,
+      };
+
+      const res = await fetch("/api/v1/work-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        setShowWorkOrderModal(false);
+        // Clear form
+        setWorkOrderTitle("");
+        setWorkOrderCategory("Plumbing");
+        setWorkOrderPriority("NORMAL");
+        setWorkOrderDescription("");
+        // Reload
+        fetchData(activeImpersonation);
+      } else {
+        setWorkOrderError(json.message || "Failed to submit work order");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "An unexpected error occurred";
+      setWorkOrderError(msg);
+    } finally {
+      setWorkOrderSaving(false);
+    }
+  };
+
   const isAdmin = data?.role === "admin" || data?.role === "super_admin" || data?.role === "property_admin";
 
   // Filter announcements matching the resident's property scope
@@ -224,6 +313,17 @@ export default function ResidentPortalPage() {
       return v.visit_date > todayStr && v.status !== "CLOSED" && v.status !== "CANCELLED";
     } else {
       return v.status === "CLOSED" || v.status === "CANCELLED" || v.visit_date < todayStr;
+    }
+  });
+
+  // Filter work orders by tab groups
+  const tabWorkOrders = workOrders.filter((wo) => {
+    if (workOrderTab === "OPEN") {
+      return ["NEW", "ASSIGNED", "IN_PROGRESS", "ON_HOLD"].includes(wo.status);
+    } else if (workOrderTab === "COMPLETED") {
+      return ["COMPLETED", "CLOSED"].includes(wo.status);
+    } else {
+      return true;
     }
   });
 
@@ -551,6 +651,118 @@ export default function ResidentPortalPage() {
               )}
             </div>
 
+            {/* My Work Orders Section */}
+            <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-6 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 dark:border-slate-700 pb-4">
+                <div className="space-y-1">
+                  <h4 className="font-bold text-slate-800 dark:text-slate-200 text-base">
+                    🛠️ {language === "en" ? "My Work Orders" : "ใบสั่งซ่อมของฉัน"}
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    {language === "en" ? "Report maintenance issues and trace progress logs." : "แจ้งซ่อมบำรุงห้องชุดและติดตามผลการดำเนินงาน"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowWorkOrderModal(true)}
+                  className="px-4 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-semibold shadow-md shadow-[#D4AF37]/10 transition"
+                >
+                  {language === "en" ? "+ Request Repair" : "+ แจ้งซ่อมบำรุง"}
+                </button>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex gap-2 border-b border-slate-100 dark:border-slate-700 pb-2">
+                {(["OPEN", "COMPLETED", "HISTORY"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setWorkOrderTab(tab)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      workOrderTab === tab
+                        ? "bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold"
+                        : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    }`}
+                  >
+                    {tab === "OPEN"
+                      ? language === "en" ? "Open Requests" : "กำลังดำเนินการ"
+                      : tab === "COMPLETED"
+                      ? language === "en" ? "Completed" : "เสร็จสิ้นแล้ว"
+                      : language === "en" ? "Full History" : "ประวัติทั้งหมด"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Work Order List */}
+              {tabWorkOrders.length === 0 ? (
+                <p className="text-xs text-slate-400 dark:text-slate-500 text-center py-8">
+                  {language === "en" ? "No work orders logged." : "ไม่มีข้อมูลการแจ้งซ่อม"}
+                </p>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-700">
+                  {tabWorkOrders.map((wo) => (
+                    <div key={wo.id} className="py-3.5 flex justify-between items-center text-sm gap-4">
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-slate-800 dark:text-slate-200 text-sm">
+                            [{wo.category}] {wo.title}
+                          </span>
+                          <span className="text-xs font-mono bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-slate-500 font-bold">
+                            {wo.work_order_code}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded font-bold text-[9px] uppercase ${
+                            wo.priority === "URGENT"
+                              ? "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400"
+                              : wo.priority === "HIGH"
+                              ? "bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-400"
+                              : wo.priority === "NORMAL"
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-400"
+                              : "bg-slate-100 text-slate-800 dark:bg-slate-900 dark:text-slate-400"
+                          }`}>
+                            {wo.priority}
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded font-bold text-[9px] ${
+                            wo.status === "NEW"
+                              ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-400"
+                              : wo.status === "ASSIGNED"
+                              ? "bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-400"
+                              : wo.status === "IN_PROGRESS"
+                              ? "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-400"
+                              : wo.status === "COMPLETED" || wo.status === "CLOSED"
+                              ? "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-400"
+                              : "bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-500"
+                          }`}>
+                            {wo.status}
+                          </span>
+                        </div>
+                        {wo.description && (
+                          <p className="text-xs text-slate-500 italic">
+                            {wo.description}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-3 text-xs text-slate-400 dark:text-slate-500 flex-wrap">
+                          <span>📅 Requested: {new Date(wo.requested_at).toLocaleDateString()}</span>
+                          {wo.assignee && (
+                            <span className="font-medium text-slate-600 dark:text-slate-300">
+                              🔧 Assigned: {wo.assignee.first_name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Cancel Request button (NEW only) */}
+                      {wo.status === "NEW" && (
+                        <button
+                          onClick={() => handleCancelWorkOrder(wo.id)}
+                          className="px-2.5 py-1 text-xs font-semibold text-red-500 border border-red-200 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-lg transition"
+                        >
+                          {language === "en" ? "Cancel" : "ยกเลิก"}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Information Cards Grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Card 1: My Property */}
@@ -843,6 +1055,122 @@ export default function ResidentPortalPage() {
                   className="px-5 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-semibold shadow-md shadow-[#D4AF37]/10 disabled:opacity-50 transition"
                 >
                   {visitorSaving ? t.common.processing : t.common.save}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Work Order Request Modal */}
+      {showWorkOrderModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-200">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-md w-full shadow-2xl p-6 relative flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+            <button
+              onClick={() => setShowWorkOrderModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg outline-none font-bold"
+              aria-label="Close modal"
+            >
+              ✕
+            </button>
+            
+            <div>
+              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+                {language === "en" ? "Report Maintenance Issue" : "แจ้งซ่อมบำรุงและบริการ"}
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {language === "en" ? "Submit a new ticket to report unit or area issues." : "กรอกข้อมูลปัญหาหรือบริการซ่อมแซมเพื่อรับงานโดยฝ่ายนิติบุคคล"}
+              </p>
+            </div>
+
+            <form onSubmit={handleWorkOrderSubmit} className="space-y-4">
+              {workOrderError && (
+                <div className="p-3 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded-lg text-sm">
+                  {workOrderError}
+                </div>
+              )}
+
+              {/* Title */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  {language === "en" ? "Issue Title" : "หัวข้อปัญหา"}
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={workOrderTitle}
+                  onChange={(e) => setWorkOrderTitle(e.target.value)}
+                  placeholder={language === "en" ? "e.g. Water Leak, AC Not Cooling" : "เช่น ท่อน้ำรั่วซึม, แอร์ไม่เย็น"}
+                  className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none"
+                />
+              </div>
+
+              {/* Category & Priority */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {language === "en" ? "Category" : "หมวดหมู่"}
+                  </label>
+                  <select
+                    value={workOrderCategory}
+                    onChange={(e) => setWorkOrderCategory(e.target.value)}
+                    className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none"
+                  >
+                    <option value="Plumbing">Plumbing</option>
+                    <option value="Electrical">Electrical</option>
+                    <option value="Cleaning">Cleaning</option>
+                    <option value="Security">Security</option>
+                    <option value="Carpentry">Carpentry</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {language === "en" ? "Priority" : "ระดับความเร่งด่วน"}
+                  </label>
+                  <select
+                    value={workOrderPriority}
+                    onChange={(e) => setWorkOrderPriority(e.target.value as "LOW" | "NORMAL" | "HIGH" | "URGENT")}
+                    className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none"
+                  >
+                    <option value="LOW">LOW</option>
+                    <option value="NORMAL">NORMAL</option>
+                    <option value="HIGH">HIGH</option>
+                    <option value="URGENT">URGENT</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  {language === "en" ? "Description" : "รายละเอียดปัญหา"}
+                </label>
+                <textarea
+                  value={workOrderDescription}
+                  onChange={(e) => setWorkOrderDescription(e.target.value)}
+                  rows={3}
+                  placeholder={language === "en" ? "Please provide details about the location or issue..." : "ระบุรายละเอียด สถานที่ หรือลักษณะปัญหา..."}
+                  className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none resize-none"
+                />
+              </div>
+
+              {/* Submit buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-700/60">
+                <button
+                  type="button"
+                  onClick={() => setShowWorkOrderModal(false)}
+                  className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                >
+                  {t.common.cancel}
+                </button>
+                <button
+                  type="submit"
+                  disabled={workOrderSaving}
+                  className="px-5 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-semibold shadow-md shadow-[#D4AF37]/10 disabled:opacity-50 transition"
+                >
+                  {workOrderSaving ? t.common.processing : t.common.save}
                 </button>
               </div>
             </form>

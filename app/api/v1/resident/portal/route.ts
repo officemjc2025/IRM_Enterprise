@@ -39,16 +39,24 @@ export async function GET(request: Request) {
     }
 
     // Resolve Person
-    const { data: person, error: personError } = await supabase
+    const { data: persons, error: personError } = await supabase
       .from("persons")
       .select("*")
       .eq("email", targetEmail)
-      .is("deleted_at", null)
-      .maybeSingle();
+      .is("deleted_at", null);
 
     if (personError) {
       throw new Error(`Failed to resolve person: ${personError.message}`);
     }
+
+    if (persons && persons.length > 1) {
+      return NextResponse.json(
+        { success: false, message: `Ambiguous identity match: Multiple person profiles found with email '${targetEmail}'` },
+        { status: 400 }
+      );
+    }
+
+    const person = persons && persons.length === 1 ? persons[0] : null;
 
     if (!person) {
       return NextResponse.json({
@@ -62,7 +70,7 @@ export async function GET(request: Request) {
     }
 
     // Resolve Active Assignment
-    const { data: assignment, error: assignmentError } = await supabase
+    const { data: assignments, error: assignmentError } = await supabase
       .from("resident_assignments")
       .select(`
         *,
@@ -82,12 +90,20 @@ export async function GET(request: Request) {
       `)
       .eq("person_id", person.id)
       .eq("status", "ACTIVE")
-      .is("deleted_at", null)
-      .maybeSingle();
+      .is("deleted_at", null);
 
     if (assignmentError) {
       throw new Error(`Failed to resolve assignment: ${assignmentError.message}`);
     }
+
+    if (assignments && assignments.length > 1) {
+      return NextResponse.json(
+        { success: false, message: `Ambiguous assignment match: Multiple active resident assignments found for person ID '${person.id}'` },
+        { status: 400 }
+      );
+    }
+
+    const assignment = assignments && assignments.length === 1 ? assignments[0] : null;
 
     // Map DB fields to the expected UI keys
     let mappedAssignment = null;
