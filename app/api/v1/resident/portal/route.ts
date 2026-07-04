@@ -84,7 +84,8 @@ export async function GET(request: Request) {
             id,
             property_name_th,
             property_name_en,
-            address
+            address_th,
+            address_en
           )
         )
       `)
@@ -108,6 +109,21 @@ export async function GET(request: Request) {
     // Map DB fields to the expected UI keys
     let mappedAssignment = null;
     if (assignment) {
+      const rawUnit = assignment.unit;
+      let mappedUnit = null;
+      if (rawUnit) {
+        const rawProp = rawUnit.properties;
+        mappedUnit = {
+          ...rawUnit,
+          properties: rawProp
+            ? {
+                ...rawProp,
+                address: rawProp.address_en || rawProp.address_th || null,
+              }
+            : null,
+        };
+      }
+
       mappedAssignment = {
         id: assignment.id,
         person_id: assignment.person_id,
@@ -118,7 +134,7 @@ export async function GET(request: Request) {
         move_out_date: assignment.move_out_date,
         status: assignment.status,
         remark: assignment.remarks,
-        unit: assignment.unit,
+        unit: mappedUnit,
       };
     }
 
