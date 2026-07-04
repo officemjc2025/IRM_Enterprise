@@ -1,16 +1,26 @@
 import { NextResponse } from "next/server";
 import { residentAssignmentService } from "@/services/resident-assignment/resident-assignment.service";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const assignments = await residentAssignmentService.getAssignments();
+    const { searchParams } = new URL(request.url);
+    const unitId = searchParams.get("unit_id");
+
+    const assignments = unitId
+      ? await residentAssignmentService.getAssignmentsByUnit(unitId)
+      : await residentAssignmentService.getAssignments();
+
     return NextResponse.json({
       success: true,
       message: "Resident assignments retrieved successfully",
       data: assignments,
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to retrieve resident assignments";
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to retrieve resident assignments";
+
     return NextResponse.json(
       { success: false, message },
       { status: 500 }

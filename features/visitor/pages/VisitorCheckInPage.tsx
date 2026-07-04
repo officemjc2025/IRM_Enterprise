@@ -8,6 +8,7 @@ import { Occupancy } from "@/features/occupancy/types/occupancy.types";
 import { Visitor } from "../types/visitor.types";
 import { AuthContext } from "@/providers/AuthProvider";
 import { useLanguage } from "@/providers/LanguageProvider";
+import { ResidentAssignment } from "@/features/resident-assignment/types/resident-assignment.types";
 
 function UnitResultCard({ unit, onSelect }: { unit: Unit; onSelect: (unit: Unit) => void }) {
   const { t } = useLanguage();
@@ -96,7 +97,7 @@ function UnitResultCard({ unit, onSelect }: { unit: Unit; onSelect: (unit: Unit)
 
 export default function VisitorCheckInPage() {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const auth = useContext(AuthContext);
   const [step, setStep] = useState(0); // 0: Select Unit, 1: Enter Details, 2: Success Confirmation
 
@@ -106,6 +107,12 @@ export default function VisitorCheckInPage() {
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
   const [unitOccupancies, setUnitOccupancies] = useState<Occupancy[]>([]);
   const [loadingUnits, setLoadingUnits] = useState(true);
+
+  // Resident Assignment states
+  const [residentAssignments, setResidentAssignments] = useState<ResidentAssignment[]>([]);
+  const [selectedAssignmentId, setSelectedAssignmentId] = useState<string>("");
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
+  const [fetchAssignmentsError, setFetchAssignmentsError] = useState("");
 
   // Form states
   const [name, setName] = useState("");
@@ -147,22 +154,61 @@ export default function VisitorCheckInPage() {
     });
   }, []);
 
-  // When a unit is selected, fetch active occupancies
+  // Local date helper to avoid UTC date rollover bugs
+  const getLocalLocalDateString = (): string => {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  // When a unit is selected, fetch active occupancies and active resident assignments
   const handleSelectUnit = async (unit: Unit) => {
     setSelectedUnit(unit);
+    setLoadingAssignments(true);
+    setFetchAssignmentsError("");
+    setSelectedAssignmentId("");
+    setResidentAssignments([]);
+
     try {
-      const res = await fetch(`/api/v1/units/${unit.id}/occupancies`);
+      // Fetch active resident assignments
+      const res = await fetch(`/api/v1/residents?unit_id=${unit.id}`);
+      if (!res.ok) {
+        throw new Error("HTTP error fetching resident assignments");
+      }
       const json = await res.json();
       if (json.success) {
-        setUnitOccupancies(json.data);
+        const activeAssignments = (json.data as ResidentAssignment[]).filter(
+          (a) => a.status === "ACTIVE"
+        );
+        setResidentAssignments(activeAssignments);
+
+        if (activeAssignments.length === 1) {
+          setSelectedAssignmentId(activeAssignments[0].id);
+        }
+
+        // Fetch active occupancies for card preview
+        const occRes = await fetch(`/api/v1/units/${unit.id}/occupancies`);
+        const occJson = await occRes.json();
+        if (occJson.success) {
+          setUnitOccupancies(occJson.data);
+        }
+
+        setStep(1);
+
+        // Pre-fill expected check-out to 2 hours from now
+        const defaultCheckout = new Date();
+        defaultCheckout.setHours(defaultCheckout.getHours() + 2);
+        setExpectedCheckout(defaultCheckout.toISOString().substring(0, 16));
+      } else {
+        setFetchAssignmentsError(json.message || "Failed to fetch resident assignments");
       }
-      setStep(1);
-      // Pre-fill expected check-out to 2 hours from now
-      const defaultCheckout = new Date();
-      defaultCheckout.setHours(defaultCheckout.getHours() + 2);
-      setExpectedCheckout(defaultCheckout.toISOString().substring(0, 16));
     } catch (err) {
-      console.error("Failed to fetch occupancies:", err);
+      console.error("Failed to fetch unit details:", err);
+      setFetchAssignmentsError(err instanceof Error ? err.message : "Failed to load unit details");
+    } finally {
+      setLoadingAssignments(false);
     }
   };
 
@@ -170,6 +216,11 @@ export default function VisitorCheckInPage() {
     e.preventDefault();
     if (!selectedUnit) return;
     setFormError("");
+
+    if (!selectedAssignmentId) {
+      setFormError(language === "en" ? "Resident Selection is required" : "กรุณาเลือกลูกบ้านผู้รับการติดต่อ");
+      return;
+    }
 
     const trimmedName = name.trim();
     const trimmedPhone = phone.trim();
@@ -201,8 +252,6 @@ export default function VisitorCheckInPage() {
       return;
     }
 
-    const activeOcc = unitOccupancies.find(o => o.status === "ACTIVE");
-
     const combinedRemarks = [
       trimmedRemarks,
       trimmedIdCard ? `ID Card: ${trimmedIdCard}` : null,
@@ -210,16 +259,17 @@ export default function VisitorCheckInPage() {
     ].filter(Boolean).join(" | ");
 
     const payload = {
-      unit_id: selectedUnit.id,
+      resident_assignment_id: selectedAssignmentId,
       visitor_name: trimmedName,
       phone: trimmedPhone || null,
       purpose,
       vehicle_plate: trimmedVehiclePlate || null,
       company: trimmedCompany || null,
-      occupancy_id: activeOcc ? activeOcc.id : null,
       security_user: securityUser,
+      expected_arrival: new Date().toISOString(),
       expected_checkout_time: checkoutTime.toISOString(),
-      remarks: combinedRemarks || null,
+      remark: combinedRemarks || null,
+      visit_date: getLocalLocalDateString(),
     };
 
     setSubmitting(true);
@@ -266,6 +316,16 @@ export default function VisitorCheckInPage() {
         {/* Step 0: Select Unit */}
         {step === 0 && (
           <div className="space-y-4">
+            {fetchAssignmentsError && (
+              <div className="p-3 bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 rounded-lg text-xs font-semibold">
+                {fetchAssignmentsError}
+              </div>
+            )}
+            {loadingAssignments && (
+              <div className="p-3 bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-400 rounded-lg text-xs font-semibold text-center animate-pulse">
+                {language === "en" ? "Resolving resident assignments..." : "กำลังค้นหาข้อมูลลูกบ้าน..."}
+              </div>
+            )}
             <div className="space-y-1">
               <label className="text-sm font-semibold">{t.visitor.searchUnit}</label>
               <input
@@ -345,6 +405,39 @@ export default function VisitorCheckInPage() {
             )}
 
             <form onSubmit={handleFormSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold mb-1 text-slate-700 dark:text-slate-300">
+                  {language === "en" ? "Resident receiving visitor *" : "ลูกบ้านผู้รับการติดต่อ *"}
+                </label>
+                {residentAssignments.length === 0 ? (
+                  <div className="p-3.5 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900/30 text-yellow-800 dark:text-yellow-400 rounded-lg text-xs font-semibold">
+                    ⚠️ {language === "en" ? "This unit has no active resident assignment." : "ห้องนี้ไม่มีลูกบ้านที่มีสถานะใช้งานอยู่"}
+                  </div>
+                ) : (
+                  <select
+                    required
+                    value={selectedAssignmentId}
+                    onChange={(e) => setSelectedAssignmentId(e.target.value)}
+                    className="w-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-sm focus:border-[#D4AF37] outline-none font-medium"
+                  >
+                    <option value="" disabled>
+                      {language === "en" ? "-- Select Resident --" : "-- เลือกลูกบ้าน --"}
+                    </option>
+                    {residentAssignments.map((a) => {
+                      const displayName = a.person?.display_name ||
+                        (a.person ? `${a.person.first_name} ${a.person.last_name || ""}`.trim() : "") ||
+                        (language === "en" ? "Resident" : "ลูกบ้าน");
+                      const occupancyType = a.occupancy_type ? ` (${a.occupancy_type})` : "";
+                      return (
+                        <option key={a.id} value={a.id}>
+                          {displayName}{occupancyType}
+                        </option>
+                      );
+                    })}
+                  </select>
+                )}
+              </div>
+
               <div>
                 <label className="block text-sm font-semibold mb-1">{t.visitor.visitorName} *</label>
                 <input
@@ -470,7 +563,7 @@ export default function VisitorCheckInPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || residentAssignments.length === 0 || !selectedAssignmentId}
                   className="px-4 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-semibold transition disabled:opacity-50"
                 >
                   {submitting ? t.common.saving : t.common.continue}
@@ -531,6 +624,9 @@ export default function VisitorCheckInPage() {
               </button>
               <button
                 onClick={() => {
+                  setSelectedUnit(null);
+                  setResidentAssignments([]);
+                  setSelectedAssignmentId("");
                   setName("");
                   setPhone("");
                   setIdCard("");
@@ -539,6 +635,14 @@ export default function VisitorCheckInPage() {
                   setCompany("");
                   setPurpose("Guest");
                   setRemarks("");
+                  setFormError("");
+                  setFetchAssignmentsError("");
+
+                  // Reset expected checkout to 2 hours from now
+                  const defaultCheckout = new Date();
+                  defaultCheckout.setHours(defaultCheckout.getHours() + 2);
+                  setExpectedCheckout(defaultCheckout.toISOString().substring(0, 16));
+
                   setStep(0);
                 }}
                 className="px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition"
