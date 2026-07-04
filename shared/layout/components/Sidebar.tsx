@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useContext } from "react";
 import Logo from "@/components/common/Logo";
 import APP_CONFIG from "@/lib/config/app";
 import {
@@ -12,6 +12,7 @@ import {
   IconSettings,
 } from "@/components/icons/LucideLike";
 import { useLanguage } from "@/providers/LanguageProvider";
+import { AuthContext } from "@/providers/AuthProvider";
 
 interface SidebarProps {
   onClose?: () => void;
@@ -20,44 +21,94 @@ interface SidebarProps {
 }
 
 export function Sidebar({ onClose, collapsed, setCollapsed }: SidebarProps) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const auth = useContext(AuthContext);
+  const userRole = auth?.profile?.role;
 
-  const navigationItems = [
-    {
-      section: t.menu.masterData,
-      items: [
-        { id: "properties", label: t.menu.properties, href: "/properties", icon: IconProperty },
-        { id: "units", label: t.menu.units, href: "/units", icon: IconProperty },
-        { id: "owners", label: t.menu.owners, href: "/owners", icon: IconResidents },
-        { id: "persons", label: t.menu.persons, href: "/persons", icon: IconResidents },
-        { id: "occupancies", label: t.menu.occupancies, href: "/occupancies", icon: IconRental },
-      ]
-    },
-    {
-      section: t.menu.operations,
-      items: [
-        { id: "import", label: t.menu.import, href: "/import", icon: IconDashboard },
-        { id: "search", label: t.menu.search, href: "/search", icon: IconVisitors },
-      ]
-    },
-    {
-      section: t.menu.business,
-      items: [
-        { id: "visitors", label: t.menu.visitors, href: "/visitors", icon: IconVisitors },
-        { id: "workorder-placeholder", label: t.menu.workOrders, href: "/work-orders", icon: IconDashboard },
-        { id: "residents-placeholder", label: t.menu.residents, href: "/residents", icon: IconResidents },
-        { id: "security-placeholder", label: t.menu.security, href: "/security", icon: IconVisitors },
-        { id: "reports-placeholder", label: t.menu.reports, href: "/reports", icon: IconDashboard },
-      ]
-    },
-    {
-      section: t.menu.system,
-      items: [
-        { id: "dashboard", label: t.menu.dashboard, href: "/", icon: IconDashboard },
-        { id: "settings", label: t.menu.settings, href: "/settings", icon: IconSettings },
-      ]
+  const isSecurity = userRole === "security";
+  const isTech = userRole === "technician";
+  const isResident = userRole && ["owner", "co_owner", "tenant", "resident"].includes(userRole);
+
+  const getFilteredItems = () => {
+    if (isResident) {
+      return [
+        {
+          section: language === "en" ? "Resident Workspace" : "พื้นที่ทำงานลูกบ้าน",
+          items: [
+            { id: "resident-home", label: language === "en" ? "My Home" : "หน้าหลัก", href: "/resident", icon: IconDashboard },
+            { id: "announcements", label: language === "en" ? "Announcements" : "ข่าวประกาศ", href: "/announcements", icon: IconDashboard },
+          ]
+        }
+      ];
     }
-  ];
+
+    if (isSecurity) {
+      return [
+        {
+          section: t.menu.business,
+          items: [
+            { id: "security-dashboard", label: t.menu.security, href: "/security", icon: IconVisitors },
+            { id: "visitors", label: t.menu.visitors, href: "/visitors", icon: IconVisitors },
+          ]
+        }
+      ];
+    }
+
+    if (isTech) {
+      return [
+        {
+          section: t.menu.business,
+          items: [
+            { id: "work-orders", label: t.menu.workOrders, href: "/work-orders", icon: IconDashboard },
+          ]
+        }
+      ];
+    }
+
+    if (userRole === "housekeeping") {
+      return [];
+    }
+
+    // Default (Admins / Managers)
+    return [
+      {
+        section: t.menu.masterData,
+        items: [
+          { id: "properties", label: t.menu.properties, href: "/properties", icon: IconProperty },
+          { id: "units", label: t.menu.units, href: "/units", icon: IconProperty },
+          { id: "owners", label: t.menu.owners, href: "/owners", icon: IconResidents },
+          { id: "persons", label: t.menu.persons, href: "/persons", icon: IconResidents },
+          { id: "occupancies", label: t.menu.occupancies, href: "/occupancies", icon: IconRental },
+        ]
+      },
+      {
+        section: t.menu.operations,
+        items: [
+          { id: "import", label: t.menu.import, href: "/import", icon: IconDashboard },
+          { id: "search", label: t.menu.search, href: "/search", icon: IconVisitors },
+        ]
+      },
+      {
+        section: t.menu.business,
+        items: [
+          { id: "visitors", label: t.menu.visitors, href: "/visitors", icon: IconVisitors },
+          { id: "workorder-placeholder", label: t.menu.workOrders, href: "/work-orders", icon: IconDashboard },
+          { id: "residents-placeholder", label: t.menu.residents, href: "/residents", icon: IconResidents },
+          { id: "security-placeholder", label: t.menu.security, href: "/security", icon: IconVisitors },
+          { id: "reports-placeholder", label: t.menu.reports, href: "/reports", icon: IconDashboard },
+        ]
+      },
+      {
+        section: t.menu.system,
+        items: [
+          { id: "dashboard", label: t.menu.dashboard, href: "/", icon: IconDashboard },
+          { id: "settings", label: t.menu.settings, href: "/settings", icon: IconSettings },
+        ]
+      }
+    ];
+  };
+
+  const navigationItems = getFilteredItems();
   return (
     <aside
       className={`h-full bg-[#0F172A] border-r border-[#D4AF37]/20 text-white flex flex-col transition-all duration-300 ${

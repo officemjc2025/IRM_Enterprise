@@ -82,9 +82,27 @@ export default function ExecutiveDashboardPage() {
 
       const userRole = profile?.role || "resident";
 
-      // Redirect resident to resident portal page
-      if (userRole === "resident") {
+      // Redirect resident roles to resident portal page
+      if (userRole === "resident" || userRole === "owner" || userRole === "co_owner" || userRole === "tenant") {
         router.push("/resident");
+        return;
+      }
+
+      // Redirect security to security dashboard
+      if (userRole === "security") {
+        router.push("/security");
+        return;
+      }
+
+      // Redirect technician to work orders
+      if (userRole === "technician") {
+        router.push("/work-orders");
+        return;
+      }
+
+      // Redirect housekeeping to login (since no workspace exists)
+      if (userRole === "housekeeping") {
+        router.push("/login");
         return;
       }
 

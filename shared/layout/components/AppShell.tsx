@@ -40,11 +40,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       path.startsWith("/persons") ||
       path.startsWith("/occupancies") ||
       path.startsWith("/owners") ||
+      path.startsWith("/ownerships") ||
+      path.startsWith("/reports") ||
+      path.startsWith("/search") ||
       path.startsWith("/import")
     ) {
       return Permissions.ManageProperty;
     }
-    if (path.startsWith("/visitors")) {
+    if (path.startsWith("/visitors") || path.startsWith("/security")) {
       return Permissions.SecurityGate;
     }
     if (path.startsWith("/work-orders")) {
@@ -67,6 +70,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       hasPermission(userRole, requiredRoles)
     ));
 
+  const isResident = userRole && ["owner", "co_owner", "tenant", "resident"].includes(userRole);
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex flex-col">
       {/* Top Navigation */}
@@ -74,13 +79,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Desktop Sidebar */}
-        <div className="hidden lg:block h-full">
-          <Sidebar
-            collapsed={collapsed}
-            setCollapsed={handleSetCollapsed}
-            onClose={() => setMobileOpen(false)}
-          />
-        </div>
+        {!isResident && (
+          <div className="hidden lg:block h-full">
+            <Sidebar
+              collapsed={collapsed}
+              setCollapsed={handleSetCollapsed}
+              onClose={() => setMobileOpen(false)}
+            />
+          </div>
+        )}
 
         {/* Mobile Responsive Drawer */}
         <ResponsiveDrawer open={mobileOpen} onClose={() => setMobileOpen(false)}>
