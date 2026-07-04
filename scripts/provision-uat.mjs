@@ -83,6 +83,11 @@ async function main() {
       passwordEnv: "UAT_TECHNICIAN2_PASSWORD"
     },
     {
+      email: "housekeeping.uat@irmenterprise.com",
+      role: "housekeeping",
+      passwordEnv: "UAT_HOUSEKEEPING_PASSWORD"
+    },
+    {
       email: "resident1.uat@irmenterprise.com",
       role: "resident",
       passwordEnv: "UAT_RESIDENT1_PASSWORD",
@@ -447,6 +452,7 @@ async function main() {
     property_admin: 1,
     security: 2,
     technician: 2,
+    housekeeping: 1,
     resident: 5
   };
 
