@@ -101,6 +101,9 @@ export function Sidebar({ onClose, collapsed, setCollapsed }: SidebarProps) {
         section: t.menu.business,
         items: [
           { id: "visitors", label: t.menu.visitors, href: "/visitors", icon: IconVisitors },
+          { id: "reservations", label: language === "en" ? "Room Reservations" : "การจองห้องพัก", href: "/reservations", icon: IconRental },
+          { id: "stays", label: language === "en" ? "Stay Tracking" : "ติดตามการเข้าพัก", href: "/stays", icon: IconRental },
+          { id: "service-bookings", label: language === "en" ? "Service Bookings" : "การจองบริการ", href: "/service-bookings", icon: IconRental },
           { id: "operations-calendar", label: language === "en" ? "Operational Calendar" : "ปฏิทินงาน", href: "/operations/calendar", icon: IconDashboard },
           { id: "workorder-placeholder", label: t.menu.workOrders, href: "/work-orders", icon: IconDashboard },
           { id: "residents-placeholder", label: t.menu.residents, href: "/residents", icon: IconResidents },

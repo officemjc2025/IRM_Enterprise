@@ -3,8 +3,8 @@
 import React, { useEffect, useState, Suspense } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useLanguage } from "@/providers/LanguageProvider";
-import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderPhoto, AttentionStatus, deriveAttentionStatus } from "@/features/work-order/types/work-order.types";
-import { PageHeader, SearchInput, EmptyState, LoadingState } from "@/shared/ui";
+import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderPhoto, deriveAttentionStatus } from "@/features/work-order/types/work-order.types";
+import { PageHeader, SearchInput, EmptyState, LoadingState, LocalizedDateTimePicker } from "@/shared/ui";
 import { createClient } from "@/lib/supabase/client";
 import { User } from "@supabase/supabase-js";
 
@@ -69,7 +69,10 @@ function WorkOrderDashboardInner() {
   const [chargeAmountVal, setChargeAmountVal] = useState("");
   const [actualCostVal, setActualCostVal] = useState("");
 
-  useEffect(() => {
+  // State adjustment during render
+  const [prevSelectedOrder, setPrevSelectedOrder] = useState<WorkOrder | null>(null);
+  if (selectedOrder !== prevSelectedOrder) {
+    setPrevSelectedOrder(selectedOrder);
     if (selectedOrder) {
       setWorkPerformed(selectedOrder.work_performed || "");
       setAdditionalWork(selectedOrder.additional_work || "");
@@ -83,7 +86,7 @@ function WorkOrderDashboardInner() {
       setChargeAmountVal("");
       setActualCostVal("");
     }
-  }, [selectedOrder]);
+  }
 
   // Create Ticket Modal State (Admin)
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -366,6 +369,32 @@ function WorkOrderDashboardInner() {
         refreshData();
       } else {
         alert(json.message || "Failed to close ticket");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleCancelWorkOrder = async (orderId: string) => {
+    const reason = prompt(language === "en" ? "Specify cancellation reason (required):" : "ระบุเหตุผลการยกเลิกใบสั่งงาน (จำเป็น):");
+    if (!reason || !reason.trim()) {
+      alert(language === "en" ? "Cancellation reason is required." : "จำเป็นต้องระบุเหตุผลการยกเลิก");
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/v1/work-orders/${orderId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cancellation_reason: reason.trim() })
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert(language === "en" ? "Work order cancelled successfully" : "ยกเลิกใบสั่งงานเสร็จสิ้น");
+        setSelectedOrder(null);
+        refreshData();
+      } else {
+        alert(json.message || "Failed to cancel work order");
       }
     } catch (err) {
       console.error(err);
@@ -861,6 +890,22 @@ function WorkOrderDashboardInner() {
                   <span className="col-span-2 text-slate-700 dark:text-slate-300 font-bold">{selectedOrder.charge_amount} THB</span>
                 </div>
               )}
+              {selectedOrder.status === "CANCELLED" && (
+                <div className="col-span-3 bg-red-50 dark:bg-red-950/20 p-2.5 rounded border border-red-200/50 text-red-700 dark:text-red-300 mt-2 text-xs">
+                  <div className="font-bold">{language === "en" ? "Work Order Cancelled" : "ใบสั่งงานนี้ถูกยกเลิก"}</div>
+                  {selectedOrder.cancellation_reason && (
+                    <div className="mt-1">
+                      <span className="font-semibold">{language === "en" ? "Reason" : "เหตุผล"}: </span>
+                      {selectedOrder.cancellation_reason}
+                    </div>
+                  )}
+                  {selectedOrder.cancelled_at && (
+                    <div className="text-[10px] opacity-75 mt-0.5 font-mono">
+                      {language === "en" ? "Cancelled at" : "ยกเลิกเมื่อ"}: {new Date(selectedOrder.cancelled_at).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Execution details inputs */}
@@ -1019,15 +1064,13 @@ function WorkOrderDashboardInner() {
                 </div>
 
                 {/* Scheduled At Selection */}
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Scheduled Date</label>
-                  <input
-                    type="datetime-local"
-                    value={scheduledAtVal}
-                    onChange={(e) => setScheduledAtVal(e.target.value)}
-                    className="p-1.5 border border-slate-200 dark:border-slate-700 rounded text-xs dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none"
-                  />
-                </div>
+                <LocalizedDateTimePicker
+                  value={scheduledAtVal}
+                  onChange={setScheduledAtVal}
+                  locale={language}
+                  label={language === "en" ? "Scheduled Date" : "กำหนดเริ่มงาน"}
+                  className="col-span-1"
+                />
 
                 {/* Financial Fields */}
                 <div className="flex gap-2">
@@ -1065,6 +1108,15 @@ function WorkOrderDashboardInner() {
                       className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-semibold transition"
                     >
                       {language === "en" ? "Close & Seal Job" : "ปิดงานซ่อมแซม"}
+                    </button>
+                  )}
+                  {["NEW", "ASSIGNED", "IN_PROGRESS", "ON_HOLD"].includes(selectedOrder.status) && (
+                    <button
+                      type="button"
+                      onClick={() => handleCancelWorkOrder(selectedOrder.id)}
+                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold transition"
+                    >
+                      {language === "en" ? "Cancel Job" : "ยกเลิกใบสั่งงาน"}
                     </button>
                   )}
                   <button
@@ -1291,15 +1343,13 @@ function WorkOrderDashboardInner() {
                   </select>
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{language === "en" ? "Scheduled Date" : "กำหนดเริ่มงาน"}</label>
-                  <input
-                    type="datetime-local"
-                    value={newScheduledAt}
-                    onChange={(e) => setNewScheduledAt(e.target.value)}
-                    className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none text-slate-800 dark:text-slate-100"
-                  />
-                </div>
+                <LocalizedDateTimePicker
+                  value={newScheduledAt}
+                  onChange={setNewScheduledAt}
+                  locale={language}
+                  label={language === "en" ? "Scheduled Date" : "กำหนดเริ่มงาน"}
+                  className="col-span-1"
+                />
               </div>
 
               {/* Assignee Selection */}
@@ -1390,7 +1440,6 @@ function WorkOrderPhotoSection({
   canDelete: boolean; 
   onRefresh: () => void; 
 }) {
-  const supabase = createClient();
   const [uploading, setUploading] = useState(false);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

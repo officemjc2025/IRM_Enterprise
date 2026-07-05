@@ -3,8 +3,8 @@
 import React, { useEffect, useState, Suspense } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useLanguage } from "@/providers/LanguageProvider";
-import { WorkOrder, WorkOrderStatus, WorkOrderPhoto, AttentionStatus, deriveAttentionStatus } from "@/features/work-order/types/work-order.types";
-import { PageHeader, SearchInput, EmptyState, LoadingState } from "@/shared/ui";
+import { WorkOrder, WorkOrderStatus, WorkOrderPhoto, deriveAttentionStatus } from "@/features/work-order/types/work-order.types";
+import { PageHeader, SearchInput, EmptyState, LoadingState, LocalizedDatePicker } from "@/shared/ui";
 import { createClient } from "@/lib/supabase/client";
 import { User } from "@supabase/supabase-js";
 
@@ -33,7 +33,10 @@ function HousekeepingDashboardInner() {
   const [rescheduleReason, setRescheduleReason] = useState("");
   const [rescheduleSaving, setRescheduleSaving] = useState(false);
 
-  useEffect(() => {
+  // State adjustment during render
+  const [prevSelectedOrder, setPrevSelectedOrder] = useState<WorkOrder | null>(null);
+  if (selectedOrder !== prevSelectedOrder) {
+    setPrevSelectedOrder(selectedOrder);
     if (selectedOrder) {
       setWorkPerformed(selectedOrder.work_performed || "");
       setAdditionalWork(selectedOrder.additional_work || "");
@@ -47,7 +50,7 @@ function HousekeepingDashboardInner() {
     setNewRescheduleDate("");
     setNewRescheduleTime("");
     setRescheduleReason("");
-  }, [selectedOrder]);
+  }
 
   const formatBangkokTime = (dateStr: string | null | undefined) => {
     if (!dateStr) return "-";
@@ -61,7 +64,7 @@ function HousekeepingDashboardInner() {
         minute: "2-digit",
         hour12: false
       }).format(new Date(dateStr));
-    } catch (e) {
+    } catch {
       return new Date(dateStr).toLocaleString();
     }
   };
@@ -638,15 +641,14 @@ function HousekeepingDashboardInner() {
                       </div>
                       
                       <div className="flex gap-2">
-                        <div className="flex-1 flex flex-col gap-1">
-                          <label className="text-[10px] text-slate-500 font-bold uppercase">{language === "en" ? "Date" : "วันที่"}</label>
-                          <input
-                            type="date"
-                            value={newRescheduleDate}
-                            onChange={(e) => setNewRescheduleDate(e.target.value)}
-                            className="p-1 border border-slate-200 dark:border-slate-700 rounded dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none"
-                          />
-                        </div>
+                        <LocalizedDatePicker
+                          value={newRescheduleDate}
+                          onChange={setNewRescheduleDate}
+                          required
+                          locale={language}
+                          label={language === "en" ? "Date" : "วันที่"}
+                          className="flex-1 text-slate-800 dark:text-slate-100"
+                        />
                         <div className="flex-1 flex flex-col gap-1">
                           <label className="text-[10px] text-slate-500 font-bold uppercase">{language === "en" ? "Time" : "เวลา"}</label>
                           <input
@@ -861,7 +863,6 @@ function WorkOrderPhotoSection({
   canDelete: boolean; 
   onRefresh: () => void; 
 }) {
-  const supabase = createClient();
   const [uploading, setUploading] = useState(false);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

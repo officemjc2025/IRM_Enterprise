@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { workOrderService } from "@/services/work-order/work-order.service";
 import { createClient } from "@/lib/supabase/server";
+import { WorkOrder } from "@/features/work-order/types/work-order.types";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -159,6 +160,26 @@ export async function PUT(request: Request, { params }: Params) {
       delete body.actual_cost;
     }
 
+    // Edit policy matrix validation
+    if (order.status === "COMPLETED" || order.status === "CLOSED" || order.status === "CANCELLED") {
+      return NextResponse.json(
+        { success: false, message: "Completed, closed, or cancelled work orders are read-only" },
+        { status: 400 }
+      );
+    }
+
+    if (order.status !== "NEW" && order.status !== "ASSIGNED") {
+      const identityCriticalFields: Array<keyof WorkOrder> = ["property_id", "unit_id", "service_team", "category"];
+      for (const field of identityCriticalFields) {
+        if (body[field] !== undefined && body[field] !== order[field]) {
+          return NextResponse.json(
+            { success: false, message: `Cannot modify '${field}' after work has started` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     const updated = await workOrderService.updateWorkOrder(id, {
       ...body,
       updated_by: user.id,
@@ -169,6 +190,19 @@ export async function PUT(request: Request, { params }: Params) {
         { success: false, message: "Work order not found or update failed" },
         { status: 404 }
       );
+    }
+
+    // Log to entity_change_history using database RPC
+    const { error: rpcError } = await supabase.rpc("log_entity_change", {
+      p_entity_type: "work_orders",
+      p_entity_id: id,
+      p_action_type: "EDIT",
+      p_changed_fields: body,
+      p_reason: null,
+    });
+
+    if (rpcError) {
+      console.error("Audit log error:", rpcError);
     }
 
     if (!isAdmin) {
@@ -217,35 +251,46 @@ export async function DELETE(request: Request, { params }: Params) {
       .single();
 
     const isAdmin = profile && ["admin", "super_admin", "property_admin"].includes(profile.role);
-    const isTechnician = profile && profile.role === "technician";
-    const isHousekeeper = profile && profile.role === "housekeeping";
 
     if (!isAdmin) {
-      if (isTechnician) {
-        if (order.service_team !== "TECHNICIAN" || order.assigned_to !== user.id) {
-          return NextResponse.json(
-            { success: false, message: "Forbidden" },
-            { status: 403 }
-          );
-        }
-      } else if (isHousekeeper) {
-        if (order.service_team !== "HOUSEKEEPING" || order.assigned_to !== user.id) {
-          return NextResponse.json(
-            { success: false, message: "Forbidden" },
-            { status: 403 }
-          );
-        }
-      } else {
-        return NextResponse.json(
-          { success: false, message: "Forbidden" },
-          { status: 403 }
-        );
+      return NextResponse.json(
+        { success: false, message: "Forbidden: Only administrators can cancel work orders" },
+        { status: 403 }
+      );
+    }
+
+    // Cancellation transition must verify eligible current status
+    if (["COMPLETED", "CLOSED", "CANCELLED"].includes(order.status)) {
+      return NextResponse.json(
+        { success: false, message: "Completed, closed, or already cancelled work orders cannot be cancelled" },
+        { status: 400 }
+      );
+    }
+
+    let cancellationReason = "";
+    try {
+      const body = await request.json();
+      if (body && body.cancellation_reason) {
+        cancellationReason = body.cancellation_reason;
       }
+    } catch {
+      // Ignore body parsing issues (e.g. no body sent)
+    }
+
+    // Cancellation reason must be non-empty after trimming
+    if (!cancellationReason || !cancellationReason.trim()) {
+      return NextResponse.json(
+        { success: false, message: "Cancellation reason must be non-empty" },
+        { status: 400 }
+      );
     }
 
     const updated = await workOrderService.updateWorkOrder(id, {
       status: "CANCELLED",
       updated_by: user.id,
+      cancelled_at: new Date().toISOString(),
+      cancelled_by: user.id,
+      cancellation_reason: cancellationReason.trim(),
     });
 
     if (!updated) {
@@ -253,6 +298,19 @@ export async function DELETE(request: Request, { params }: Params) {
         { success: false, message: "Work order not found or cancellation failed" },
         { status: 404 }
       );
+    }
+
+    // Log to entity_change_history using database RPC
+    const { error: rpcError } = await supabase.rpc("log_entity_change", {
+      p_entity_type: "work_orders",
+      p_entity_id: id,
+      p_action_type: "CANCEL",
+      p_changed_fields: { status: "CANCELLED" },
+      p_reason: cancellationReason.trim(),
+    });
+
+    if (rpcError) {
+      console.error("Audit log error:", rpcError);
     }
 
     return NextResponse.json({

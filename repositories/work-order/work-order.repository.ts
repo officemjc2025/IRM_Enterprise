@@ -34,6 +34,9 @@ interface WorkOrderDbRow {
   created_by?: string | null;
   updated_by?: string | null;
   deleted_at?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
+  cancellation_reason?: string | null;
 
   // Joined relations
   properties?: {
@@ -180,6 +183,9 @@ function mapToWorkOrder(row: WorkOrderDbRow): WorkOrder {
     worker_remark: row.worker_remark,
     charge_amount: row.charge_amount,
     actual_cost: row.actual_cost,
+    cancelled_at: row.cancelled_at,
+    cancelled_by: row.cancelled_by,
+    cancellation_reason: row.cancellation_reason,
 
     property: row.properties ? {
       id: row.properties.id,
@@ -405,6 +411,9 @@ export async function update(id: string, dto: UpdateWorkOrderDto): Promise<WorkO
   if (dto.worker_remark !== undefined) payload.worker_remark = dto.worker_remark;
   if (dto.charge_amount !== undefined) payload.charge_amount = dto.charge_amount;
   if (dto.actual_cost !== undefined) payload.actual_cost = dto.actual_cost;
+  if (dto.cancelled_at !== undefined) payload.cancelled_at = dto.cancelled_at;
+  if (dto.cancelled_by !== undefined) payload.cancelled_by = dto.cancelled_by;
+  if (dto.cancellation_reason !== undefined) payload.cancellation_reason = dto.cancellation_reason;
 
   payload.updated_at = new Date().toISOString();
 

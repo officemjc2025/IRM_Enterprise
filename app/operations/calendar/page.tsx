@@ -3,10 +3,11 @@
 import React, { useEffect, useState, Suspense } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useLanguage } from "@/providers/LanguageProvider";
-import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderPhoto, AttentionStatus, deriveAttentionStatus } from "@/features/work-order/types/work-order.types";
-import { PageHeader, LoadingState, EmptyState } from "@/shared/ui";
+import { WorkOrder, WorkOrderPriority, deriveAttentionStatus } from "@/features/work-order/types/work-order.types";
+import { PageHeader, LoadingState, LocalizedDatePicker, LocalizedDateTimePicker } from "@/shared/ui";
 import { createClient } from "@/lib/supabase/client";
 import { User } from "@supabase/supabase-js";
+import { formatDate } from "@/shared/utils";
 
 interface TechnicianProfile {
   id: string;
@@ -14,18 +15,6 @@ interface TechnicianProfile {
   display_name: string | null;
   email: string;
   phone: string | null;
-}
-
-interface PropertyOption {
-  id: string;
-  property_name_th: string;
-  property_name_en: string | null;
-}
-
-interface UnitOption {
-  id: string;
-  unit_number: string;
-  property_id: string;
 }
 
 // -----------------------------------------------------------------------------
@@ -104,14 +93,6 @@ function formatBangkokTime(dateStr: string) {
   return `${hr}:${min}`;
 }
 
-function formatBangkokDateString(dateStr: string) {
-  const date = new Date(dateStr);
-  const parts = getBangkokParts(date);
-  const day = String(parts.day).padStart(2, "0");
-  const month = String(parts.month + 1).padStart(2, "0");
-  return `${day}/${month}/${parts.year}`;
-}
-
 // -----------------------------------------------------------------------------
 // Main Component
 // -----------------------------------------------------------------------------
@@ -125,9 +106,10 @@ export default function CalendarPage() {
   );
 }
 
+const supabase = createClient();
+
 function CalendarContent() {
   const { language } = useLanguage();
-  const supabase = createClient();
 
   const [role, setRole] = useState<string>("resident");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -144,8 +126,6 @@ function CalendarContent() {
   const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
   const [technicians, setTechnicians] = useState<TechnicianProfile[]>([]);
   const [housekeepers, setHousekeepers] = useState<TechnicianProfile[]>([]);
-  const [properties, setProperties] = useState<PropertyOption[]>([]);
-  const [units, setUnits] = useState<UnitOption[]>([]);
 
   // Editing / Action States inside details modal
   const [assigneeId, setAssigneeId] = useState("");
@@ -154,10 +134,8 @@ function CalendarContent() {
   const [serviceTeamVal, setServiceTeamVal] = useState<"TECHNICIAN" | "HOUSEKEEPING">("TECHNICIAN");
   const [chargeAmountVal, setChargeAmountVal] = useState("");
   const [actualCostVal, setActualCostVal] = useState("");
-  const [workPerformed, setWorkPerformed] = useState("");
-  const [additionalWork, setAdditionalWork] = useState("");
-  const [workerRemark, setWorkerRemark] = useState("");
   const [adminReviewRemark, setAdminReviewRemark] = useState("");
+  const [workerReschedDate, setWorkerReschedDate] = useState("");
 
   const isAdmin = ["admin", "super_admin", "property_admin"].includes(role);
   const isTechnician = role === "technician";
@@ -198,16 +176,12 @@ function CalendarContent() {
 
         // Load metadata options for Admin assignment editing
         if (["admin", "super_admin", "property_admin"].includes(resolvedRole)) {
-          const [techsRes, housekeepersRes, propsRes, unitsRes] = await Promise.all([
+          const [techsRes, housekeepersRes] = await Promise.all([
             supabase.from("profiles").select("id, full_name, display_name, email, phone").eq("role", "technician"),
             supabase.from("profiles").select("id, full_name, display_name, email, phone").eq("role", "housekeeping"),
-            supabase.from("properties").select("id, property_name_th, property_name_en"),
-            supabase.from("units").select("id, unit_number, property_id"),
           ]);
           setTechnicians(techsRes.data || []);
           setHousekeepers(housekeepersRes.data || []);
-          setProperties(propsRes.data || []);
-          setUnits(unitsRes.data || []);
         }
       } catch (err) {
         console.error(err);
@@ -218,7 +192,7 @@ function CalendarContent() {
   }, []);
 
   // Fetch range-based calendar data & unscheduled jobs list
-  const refreshCalendarData = async () => {
+  const refreshCalendarData = React.useCallback(async () => {
     if (role === "resident") return;
     try {
       setLoading(true);
@@ -245,19 +219,23 @@ function CalendarContent() {
         const unscheduled = allJobs.filter((o) => !o.scheduled_at && !["COMPLETED", "CLOSED", "CANCELLED"].includes(o.status));
         setUnscheduledOrders(unscheduled);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Failed to load operational calendar data");
+      const message = err instanceof Error ? err.message : "Failed to load operational calendar data";
+      setError(message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeDate, viewMode, teamFilter, role]);
 
   useEffect(() => {
     if (role !== "resident") {
-      refreshCalendarData();
+      const timer = setTimeout(() => {
+        refreshCalendarData();
+      }, 0);
+      return () => clearTimeout(timer);
     }
-  }, [activeDate, viewMode, teamFilter, role]);
+  }, [role, refreshCalendarData]);
 
   // Sync state when details modal opens
   const openOrderDetails = (order: WorkOrder) => {
@@ -268,10 +246,8 @@ function CalendarContent() {
     setServiceTeamVal(order.service_team || "TECHNICIAN");
     setChargeAmountVal(order.charge_amount !== null && order.charge_amount !== undefined ? String(order.charge_amount) : "");
     setActualCostVal(order.actual_cost !== null && order.actual_cost !== undefined ? String(order.actual_cost) : "");
-    setWorkPerformed(order.work_performed || "");
-    setAdditionalWork(order.additional_work || "");
-    setWorkerRemark(order.worker_remark || "");
     setAdminReviewRemark("");
+    setWorkerReschedDate("");
   };
 
   const refreshOrderDetails = async (orderId: string) => {
@@ -290,77 +266,6 @@ function CalendarContent() {
   // -----------------------------------------------------------------------------
   // Operational Action Handlers (Acknowledge, Start, Pause, Resume, Complete)
   // -----------------------------------------------------------------------------
-  const handleAcknowledge = async (orderId: string) => {
-    try {
-      const res = await fetch(`/api/v1/work-orders/${orderId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          acknowledged_at: new Date().toISOString(),
-          acknowledged_by: currentUser?.id,
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        refreshOrderDetails(orderId);
-      } else {
-        alert(json.message || "Failed to acknowledge");
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleUpdateStatus = async (orderId: string, nextStatus: WorkOrderStatus) => {
-    if (nextStatus === "COMPLETED" && !workPerformed.trim()) {
-      alert(language === "en" ? "Please fill in the Work Performed details before completing." : "กรุณาระบุรายละเอียดงานที่ปฏิบัติก่อนเสร็จสิ้นงาน");
-      return;
-    }
-    try {
-      const res = await fetch(`/api/v1/work-orders/${orderId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          status: nextStatus,
-          work_performed: workPerformed.trim() || null,
-          additional_work: additionalWork.trim() || null,
-          worker_remark: workerRemark.trim() || null,
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        refreshOrderDetails(orderId);
-      } else {
-        alert(json.message || "Failed to update status");
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleSaveDraft = async (orderId: string) => {
-    try {
-      const res = await fetch(`/api/v1/work-orders/${orderId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          work_performed: workPerformed.trim() || null,
-          additional_work: additionalWork.trim() || null,
-          worker_remark: workerRemark.trim() || null,
-        }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        alert(language === "en" ? "Draft saved successfully" : "บันทึกร่างสำเร็จ");
-        refreshOrderDetails(orderId);
-      } else {
-        alert(json.message || "Failed to save draft");
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   const handleAdminAssign = async (orderId: string) => {
     try {
       const res = await fetch(`/api/v1/work-orders/${orderId}`, {
@@ -432,16 +337,16 @@ function CalendarContent() {
 
   const handleWorkerReschedule = async (e: React.FormEvent) => {
     e.preventDefault();
-    const dateInput = (e.target as any).reschedDate.value;
-    const timeInput = (e.target as any).reschedTime.value;
-    const reasonInput = (e.target as any).reschedReason.value;
+    const target = e.target as HTMLFormElement;
+    const timeInput = (target.elements.namedItem("reschedTime") as HTMLInputElement).value;
+    const reasonInput = (target.elements.namedItem("reschedReason") as HTMLInputElement).value;
 
-    if (!dateInput || !timeInput || !reasonInput.trim()) {
+    if (!workerReschedDate || !timeInput || !reasonInput.trim()) {
       alert("Please fill in all reschedule request fields.");
       return;
     }
 
-    const bangkokTime = new Date(`${dateInput}T${timeInput}:00`);
+    const bangkokTime = new Date(`${workerReschedDate}T${timeInput}:00`);
     try {
       const res = await fetch(`/api/v1/work-orders/${selectedOrder?.id}/schedule-changes`, {
         method: "POST",
@@ -1019,7 +924,7 @@ function CalendarContent() {
                 <div className="grid grid-cols-3">
                   <span className="text-slate-400">{language === "en" ? "Scheduled At" : "กำหนดเริ่มงาน"}:</span>
                   <span className="col-span-2 text-slate-500 font-mono text-xs">
-                    {formatBangkokDateString(selectedOrder.scheduled_at)} {formatBangkokTime(selectedOrder.scheduled_at)}
+                    {formatDate(selectedOrder.scheduled_at, language)} {formatBangkokTime(selectedOrder.scheduled_at)}
                   </span>
                 </div>
               )}
@@ -1081,20 +986,18 @@ function CalendarContent() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase">{language === "en" ? "Scheduled At" : "กำหนดวันเวลา"}</label>
-                    <input
-                      type="datetime-local"
-                      value={scheduledAtVal}
-                      onChange={(e) => setScheduledAtVal(e.target.value)}
-                      className="p-1 border border-slate-200 dark:border-slate-700 rounded dark:bg-slate-900 text-xs outline-none"
-                    />
-                  </div>
+                  <LocalizedDateTimePicker
+                    value={scheduledAtVal}
+                    onChange={setScheduledAtVal}
+                    locale={language}
+                    label={language === "en" ? "Scheduled At" : "กำหนดวันเวลา"}
+                    className="col-span-1"
+                  />
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase">{language === "en" ? "Service Team" : "ประเภทงาน"}</label>
                     <select
                       value={serviceTeamVal}
-                      onChange={(e) => setServiceTeamVal(e.target.value as any)}
+                      onChange={(e) => setServiceTeamVal(e.target.value as "TECHNICIAN" | "HOUSEKEEPING")}
                       className="p-1.5 border border-slate-200 dark:border-slate-700 rounded dark:bg-slate-900 text-xs outline-none"
                     >
                       <option value="TECHNICIAN">TECHNICIAN</option>
@@ -1154,15 +1057,13 @@ function CalendarContent() {
 
                 <form onSubmit={handleWorkerReschedule} className="space-y-3">
                   <div className="grid grid-cols-2 gap-2">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">{language === "en" ? "New Date" : "วันที่ใหม่"}</label>
-                      <input
-                        type="date"
-                        name="reschedDate"
-                        required
-                        className="p-1 border border-slate-200 dark:border-slate-700 rounded dark:bg-slate-900 text-xs outline-none"
-                      />
-                    </div>
+                    <LocalizedDatePicker
+                      value={workerReschedDate}
+                      onChange={setWorkerReschedDate}
+                      required
+                      locale={language}
+                      label={language === "en" ? "New Date" : "วันที่ใหม่"}
+                    />
                     <div className="flex flex-col gap-1">
                       <label className="text-[10px] font-bold text-slate-500 uppercase">{language === "en" ? "New Time" : "เวลาใหม่"}</label>
                       <input
@@ -1216,7 +1117,7 @@ function CalendarContent() {
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-slate-700 dark:text-slate-300">
-                            {formatBangkokDateString(change.requested_scheduled_at)} {formatBangkokTime(change.requested_scheduled_at)}
+                            {formatDate(change.requested_scheduled_at, language)} {formatBangkokTime(change.requested_scheduled_at)}
                           </span>
                           <span className={`px-1.5 py-0.5 rounded font-extrabold text-[8px] ${
                             change.status === "PENDING"

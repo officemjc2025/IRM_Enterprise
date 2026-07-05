@@ -54,6 +54,9 @@ export interface WorkOrder {
   worker_remark?: string | null;
   charge_amount?: number | null;
   actual_cost?: number | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
+  cancellation_reason?: string | null;
 
   // Relations
   property?: Property | null;
@@ -122,6 +125,9 @@ export interface UpdateWorkOrderDto {
   worker_remark?: string | null;
   charge_amount?: number | null;
   actual_cost?: number | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
+  cancellation_reason?: string | null;
 }
 
 export type AttentionStatus =
