@@ -33,7 +33,7 @@ export async function GET(request: Request) {
     // Retrieve user profile to check role
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, property_id")
       .eq("id", user.id)
       .single();
 
@@ -43,7 +43,13 @@ export async function GET(request: Request) {
 
     // Security check:
     if (isAdmin) {
-      // Admins see all work orders
+      if (profile && profile.role === "property_admin") {
+        if (!profile.property_id) {
+          orders = [];
+        } else {
+          orders = orders.filter((o) => o.property_id === profile.property_id);
+        }
+      }
     } else if (isTechnician) {
       // Technicians only see technician jobs assigned to them
       orders = orders.filter((o) => o.service_team === "TECHNICIAN" && o.assigned_to === user.id);
@@ -75,6 +81,27 @@ export async function GET(request: Request) {
           (o.resident_assignment_id && assignmentIds.includes(o.resident_assignment_id))
         );
       }
+    }
+
+    const startStr = searchParams.get("start");
+    const endStr = searchParams.get("end");
+    const serviceTeam = searchParams.get("service_team");
+
+    if (startStr || endStr) {
+      const startDate = startStr ? new Date(startStr) : null;
+      const endDate = endStr ? new Date(endStr) : null;
+
+      orders = orders.filter((o) => {
+        if (!o.scheduled_at) return false;
+        const d = new Date(o.scheduled_at);
+        if (startDate && d < startDate) return false;
+        if (endDate && d > endDate) return false;
+        return true;
+      });
+    }
+
+    if (serviceTeam && serviceTeam !== "ALL") {
+      orders = orders.filter((o) => o.service_team === serviceTeam);
     }
 
     if (!isAdmin) {

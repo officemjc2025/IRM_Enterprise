@@ -60,6 +60,7 @@ export function Sidebar({ onClose, collapsed, setCollapsed }: SidebarProps) {
           section: t.menu.business,
           items: [
             { id: "work-orders", label: t.menu.workOrders, href: "/work-orders", icon: IconDashboard },
+            { id: "operations-calendar", label: language === "en" ? "Operational Calendar" : "ปฏิทินงาน", href: "/operations/calendar", icon: IconDashboard },
           ]
         }
       ];
@@ -71,6 +72,7 @@ export function Sidebar({ onClose, collapsed, setCollapsed }: SidebarProps) {
           section: language === "en" ? "Housekeeping Workspace" : "พื้นที่ทำงานแม่บ้าน",
           items: [
             { id: "housekeeping-jobs", label: language === "en" ? "My Jobs" : "งานของฉัน", href: "/housekeeping", icon: IconDashboard },
+            { id: "operations-calendar", label: language === "en" ? "Operational Calendar" : "ปฏิทินงาน", href: "/operations/calendar", icon: IconDashboard },
           ]
         }
       ];
@@ -99,6 +101,7 @@ export function Sidebar({ onClose, collapsed, setCollapsed }: SidebarProps) {
         section: t.menu.business,
         items: [
           { id: "visitors", label: t.menu.visitors, href: "/visitors", icon: IconVisitors },
+          { id: "operations-calendar", label: language === "en" ? "Operational Calendar" : "ปฏิทินงาน", href: "/operations/calendar", icon: IconDashboard },
           { id: "workorder-placeholder", label: t.menu.workOrders, href: "/work-orders", icon: IconDashboard },
           { id: "residents-placeholder", label: t.menu.residents, href: "/residents", icon: IconResidents },
           { id: "security-placeholder", label: t.menu.security, href: "/security", icon: IconVisitors },
