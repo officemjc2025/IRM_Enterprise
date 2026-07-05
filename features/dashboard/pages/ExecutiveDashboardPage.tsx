@@ -100,9 +100,9 @@ export default function ExecutiveDashboardPage() {
         return;
       }
 
-      // Redirect housekeeping to login (since no workspace exists)
+      // Redirect housekeeping to housekeeping dashboard/workspace
       if (userRole === "housekeeping") {
-        router.push("/login");
+        router.push("/housekeeping");
         return;
       }
 

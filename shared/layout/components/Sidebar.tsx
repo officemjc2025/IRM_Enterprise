@@ -66,7 +66,14 @@ export function Sidebar({ onClose, collapsed, setCollapsed }: SidebarProps) {
     }
 
     if (userRole === "housekeeping") {
-      return [];
+      return [
+        {
+          section: language === "en" ? "Housekeeping Workspace" : "พื้นที่ทำงานแม่บ้าน",
+          items: [
+            { id: "housekeeping-jobs", label: language === "en" ? "My Jobs" : "งานของฉัน", href: "/housekeeping", icon: IconDashboard },
+          ]
+        }
+      ];
     }
 
     // Default (Admins / Managers)

@@ -36,6 +36,7 @@ function WorkOrderDashboardInner() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [technicians, setTechnicians] = useState<TechnicianProfile[]>([]);
+  const [housekeepers, setHousekeepers] = useState<TechnicianProfile[]>([]);
   const [properties, setProperties] = useState<PropertyOption[]>([]);
   const [units, setUnits] = useState<UnitOption[]>([]);
   const [summary, setSummary] = useState({ open: 0, inProgress: 0, completedToday: 0, overdue: 0 });
@@ -49,6 +50,7 @@ function WorkOrderDashboardInner() {
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [propertyFilter, setPropertyFilter] = useState<string>("ALL");
   const [techFilter, setTechFilter] = useState<string>("ALL");
+  const [teamFilter, setTeamFilter] = useState<string>("ALL");
 
   // Tab View
   const [activeTab, setActiveTab] = useState<"ACTIVE" | "HISTORY">("ACTIVE");
@@ -57,6 +59,8 @@ function WorkOrderDashboardInner() {
   const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
   const [assigneeId, setAssigneeId] = useState("");
   const [priorityVal, setPriorityVal] = useState<WorkOrderPriority>("NORMAL");
+  const [scheduledAtVal, setScheduledAtVal] = useState("");
+  const [serviceTeamVal, setServiceTeamVal] = useState<"TECHNICIAN" | "HOUSEKEEPING">("TECHNICIAN");
 
   // Create Ticket Modal State (Admin)
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -66,6 +70,9 @@ function WorkOrderDashboardInner() {
   const [newDescription, setNewDescription] = useState("");
   const [newPropertyId, setNewPropertyId] = useState("");
   const [newUnitId, setNewUnitId] = useState("");
+  const [newServiceTeam, setNewServiceTeam] = useState<"TECHNICIAN" | "HOUSEKEEPING">("TECHNICIAN");
+  const [newScheduledAt, setNewScheduledAt] = useState("");
+  const [newAssigneeId, setNewAssigneeId] = useState("");
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState("");
 
@@ -92,6 +99,13 @@ function WorkOrderDashboardInner() {
           .select("id, full_name, display_name, email, phone")
           .eq("role", "technician");
         setTechnicians((techs as TechnicianProfile[]) || []);
+
+        // Load housekeepers
+        const { data: hks } = await supabase
+          .from("profiles")
+          .select("id, full_name, display_name, email, phone")
+          .eq("role", "housekeeping");
+        setHousekeepers((hks as TechnicianProfile[]) || []);
       }
 
       // Load properties & units for Admin form
@@ -155,6 +169,9 @@ function WorkOrderDashboardInner() {
         title: newTitle.trim(),
         category: newCategory,
         priority: newPriority,
+        service_team: newServiceTeam,
+        assigned_to: newAssigneeId || null,
+        scheduled_at: newScheduledAt || null,
         description: newDescription.trim() || null,
       };
 
@@ -171,6 +188,9 @@ function WorkOrderDashboardInner() {
         setNewDescription("");
         setNewPropertyId("");
         setNewUnitId("");
+        setNewServiceTeam("TECHNICIAN");
+        setNewScheduledAt("");
+        setNewAssigneeId("");
         refreshData();
       } else {
         setCreateError(json.message || "Failed to create work order");
@@ -213,6 +233,8 @@ function WorkOrderDashboardInner() {
         body: JSON.stringify({
           assigned_to: assigneeId || null,
           priority: priorityVal,
+          service_team: serviceTeamVal,
+          scheduled_at: scheduledAtVal ? new Date(scheduledAtVal).toISOString() : null,
         }),
       });
 
@@ -254,7 +276,12 @@ function WorkOrderDashboardInner() {
     setSelectedOrder(order);
     setAssigneeId(order.assigned_to || "");
     setPriorityVal(order.priority);
+    setScheduledAtVal(order.scheduled_at ? new Date(order.scheduled_at).toISOString().slice(0, 16) : "");
+    setServiceTeamVal(order.service_team);
   };
+
+  const isAdmin = ["admin", "super_admin", "property_admin"].includes(role);
+  const isTechnician = role === "technician";
 
   const filteredUnits = units.filter((u) => u.property_id === newPropertyId);
 
@@ -284,11 +311,13 @@ function WorkOrderDashboardInner() {
 
   // Filters Panel matching
   const matchFiltered = searchedOrders.filter((o) => {
+    if (isTechnician && o.service_team !== "TECHNICIAN") return false;
     if (statusFilter !== "ALL" && o.status !== statusFilter) return false;
     if (priorityFilter !== "ALL" && o.priority !== priorityFilter) return false;
     if (categoryFilter !== "ALL" && o.category !== categoryFilter) return false;
     if (propertyFilter !== "ALL" && o.property_id !== propertyFilter) return false;
     if (techFilter !== "ALL" && o.assigned_to !== techFilter) return false;
+    if (teamFilter !== "ALL" && o.service_team !== teamFilter) return false;
     return true;
   });
 
@@ -299,21 +328,18 @@ function WorkOrderDashboardInner() {
       : ["CLOSED", "CANCELLED"].includes(o.status)
   );
 
-  const isAdmin = ["admin", "super_admin", "property_admin"].includes(role);
-  const isTechnician = role === "technician";
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <PageHeader
-          title={language === "en" ? "Work Order Dashboard" : "ระบบจัดการใบสั่งซ่อมบำรุง"}
+          title={language === "en" ? "Work Orders Dashboard" : "ระบบจัดการใบสั่งงาน"}
         />
         {isAdmin && (
           <button
             onClick={() => setShowCreateModal(true)}
             className="px-4 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white rounded-lg text-sm font-semibold shadow-md shadow-[#D4AF37]/10 transition"
           >
-            {language === "en" ? "+ Create Ticket" : "+ เปิดใบสั่งงาน"}
+            {language === "en" ? "+ Create Work Order" : "+ สร้างใบสั่งงาน"}
           </button>
         )}
       </div>
@@ -357,23 +383,49 @@ function WorkOrderDashboardInner() {
       {/* Filters and Search Panel */}
       <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-4 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-          {/* Tabs */}
-          <div className="flex gap-2 w-full md:w-auto">
-            {(["ACTIVE", "HISTORY"] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`flex-1 md:flex-none px-4 py-2 rounded-lg text-xs font-bold transition ${
-                  activeTab === tab
-                    ? "bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200"
-                    : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-                }`}
-              >
-                {tab === "ACTIVE"
-                  ? language === "en" ? "Active Tickets" : "ใบสั่งงานที่กำลังดำเนินการ"
-                  : language === "en" ? "Archived Logs" : "ประวัติที่ปิดไปแล้ว"}
-              </button>
-            ))}
+          {/* Tabs: Active/History & Team Segmented Controls */}
+          <div className="flex flex-wrap gap-4 items-center w-full md:w-auto">
+            {/* Active/History Tabs */}
+            <div className="flex gap-1 bg-slate-100/60 dark:bg-slate-900/40 p-1 rounded-lg">
+              {(["ACTIVE", "HISTORY"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition ${
+                    activeTab === tab
+                      ? "bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-200 shadow-sm"
+                      : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                  }`}
+                >
+                  {tab === "ACTIVE"
+                    ? language === "en" ? "Active Tickets" : "ใบสั่งงานที่กำลังดำเนินการ"
+                    : language === "en" ? "Archived Logs" : "ประวัติที่ปิดไปแล้ว"}
+                </button>
+              ))}
+            </div>
+
+            {/* Team Segmentation Tabs (Visible to Admin/Manager only) */}
+            {isAdmin && (
+              <div className="flex gap-1 bg-slate-100/60 dark:bg-slate-900/40 p-1 rounded-lg border border-slate-200/40 dark:border-slate-700/20">
+                {([
+                  { value: "ALL", labelEn: "All Jobs", labelTh: "ทั้งหมด" },
+                  { value: "TECHNICIAN", labelEn: "Technician", labelTh: "งานช่าง" },
+                  { value: "HOUSEKEEPING", labelEn: "Housekeeping", labelTh: "งานแม่บ้าน" }
+                ] as const).map((team) => (
+                  <button
+                    key={team.value}
+                    onClick={() => setTeamFilter(team.value)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-bold transition ${
+                      teamFilter === team.value
+                        ? "bg-[#D4AF37] text-white shadow-sm"
+                        : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                    }`}
+                  >
+                    {language === "en" ? team.labelEn : team.labelTh}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Search bar */}
@@ -381,13 +433,14 @@ function WorkOrderDashboardInner() {
             <SearchInput
               value={searchTerm}
               onChange={setSearchTerm}
-              placeholder={language === "en" ? "Search tickets..." : "ค้นหาใบสั่งซ่อม..."}
+              placeholder={language === "en" ? "Search jobs..." : "ค้นหาใบสั่งงาน..."}
             />
           </div>
         </div>
 
         {/* Advanced Filters Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 border-t border-slate-50 dark:border-slate-700/50">
+
           {/* Status filter */}
           <div className="flex flex-col gap-1">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === "en" ? "Status" : "สถานะ"}</span>
@@ -579,8 +632,14 @@ function WorkOrderDashboardInner() {
 
       {/* Details & Assignment Modal */}
       {selectedOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-200">
-          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-md w-full shadow-2xl p-6 relative flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+        <div 
+          onClick={() => setSelectedOrder(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-200"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-md w-full shadow-2xl p-6 relative flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150"
+          >
             {/* Close Button */}
             <button
               onClick={() => setSelectedOrder(null)}
@@ -591,7 +650,7 @@ function WorkOrderDashboardInner() {
 
             <div>
               <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                {language === "en" ? "Work Order Sheet" : "ใบสั่งซ่อมบำรุงอย่างเป็นทางการ"}
+                {language === "en" ? "Work Order Sheet" : "ใบสั่งงานอย่างเป็นทางการ"}
               </h3>
               <p className="text-xs text-slate-500 font-mono mt-0.5">
                 Code: {selectedOrder.work_order_code}
@@ -627,6 +686,16 @@ function WorkOrderDashboardInner() {
                 <span className="col-span-2 font-mono text-slate-700 dark:text-slate-300">Unit {selectedOrder.unit?.unit_number}</span>
               </div>
               <div className="grid grid-cols-3">
+                <span className="text-slate-400">{language === "en" ? "Service Team" : "ทีมบริการ"}:</span>
+                <span className="col-span-2 text-slate-800 dark:text-slate-200 font-semibold">{selectedOrder.service_team}</span>
+              </div>
+              {selectedOrder.scheduled_at && (
+                <div className="grid grid-cols-3">
+                  <span className="text-slate-400">{language === "en" ? "Scheduled At" : "กำหนดเริ่มงาน"}:</span>
+                  <span className="col-span-2 text-slate-500 font-mono text-xs">{new Date(selectedOrder.scheduled_at).toLocaleString()}</span>
+                </div>
+              )}
+              <div className="grid grid-cols-3">
                 <span className="text-slate-400">{language === "en" ? "Requested At" : "แจ้งเรื่องเมื่อ"}:</span>
                 <span className="col-span-2 text-slate-500 font-mono text-xs">{new Date(selectedOrder.requested_at).toLocaleString()}</span>
               </div>
@@ -651,20 +720,47 @@ function WorkOrderDashboardInner() {
                   🛠️ Admin Assignment Panel
                 </span>
                 
+                {/* Service Team Selection */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">{language === "en" ? "Service Team" : "ทีมปฏิบัติงาน"}</label>
+                  <select
+                    value={serviceTeamVal}
+                    onChange={(e) => {
+                      const nextTeam = e.target.value as "TECHNICIAN" | "HOUSEKEEPING";
+                      setServiceTeamVal(nextTeam);
+                      setAssigneeId("");
+                    }}
+                    className="p-1.5 border border-slate-200 dark:border-slate-700 rounded text-xs dark:bg-slate-900 outline-none"
+                  >
+                    <option value="TECHNICIAN">{language === "en" ? "TECHNICIAN" : "งานช่าง"}</option>
+                    <option value="HOUSEKEEPING">{language === "en" ? "HOUSEKEEPING" : "งานแม่บ้าน"}</option>
+                  </select>
+                </div>
+
                 {/* Assign Technician select */}
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Technician</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">
+                    {serviceTeamVal === "TECHNICIAN"
+                      ? (language === "en" ? "Technician" : "ช่างเทคนิค")
+                      : (language === "en" ? "Housekeeper" : "แม่บ้าน")}
+                  </label>
                   <select
                     value={assigneeId}
                     onChange={(e) => setAssigneeId(e.target.value)}
                     className="p-1.5 border border-slate-200 dark:border-slate-700 rounded text-xs dark:bg-slate-900 outline-none"
                   >
                     <option value="">-- UNASSIGNED --</option>
-                    {technicians.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.full_name || t.display_name}
-                      </option>
-                    ))}
+                    {serviceTeamVal === "TECHNICIAN"
+                      ? technicians.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.full_name || t.display_name}
+                          </option>
+                        ))
+                      : housekeepers.map((h) => (
+                          <option key={h.id} value={h.id}>
+                            {h.full_name || h.display_name}
+                          </option>
+                        ))}
                   </select>
                 </div>
 
@@ -681,6 +777,17 @@ function WorkOrderDashboardInner() {
                     <option value="HIGH">HIGH</option>
                     <option value="URGENT">URGENT</option>
                   </select>
+                </div>
+
+                {/* Scheduled At Selection */}
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Scheduled Date</label>
+                  <input
+                    type="datetime-local"
+                    value={scheduledAtVal}
+                    onChange={(e) => setScheduledAtVal(e.target.value)}
+                    className="p-1.5 border border-slate-200 dark:border-slate-700 rounded text-xs dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none"
+                  />
                 </div>
 
                 <div className="flex justify-end gap-2 pt-1">
@@ -765,8 +872,14 @@ function WorkOrderDashboardInner() {
 
       {/* Admin Ticket Creation Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-200">
-          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-md w-full shadow-2xl p-6 relative flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+        <div 
+          onClick={() => setShowCreateModal(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-200"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-md w-full shadow-2xl p-6 relative flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150"
+          >
             <button
               onClick={() => setShowCreateModal(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg outline-none font-bold"
@@ -776,10 +889,10 @@ function WorkOrderDashboardInner() {
             
             <div>
               <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                {language === "en" ? "Open New Work Order Ticket" : "เปิดใบสั่งซ่อมบำรุงใบใหม่"}
+                {language === "en" ? "Open New Work Order" : "เปิดใบสั่งงานใบใหม่"}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                {language === "en" ? "Report a maintenance request on behalf of a resident." : "เปิดคำแจ้งงานบำรุงรักษาโดยนิติบุคคลโครงการ"}
+                {language === "en" ? "Report a service request on behalf of a resident." : "เปิดคำสั่งงานบริการโดยนิติบุคคลโครงการ"}
               </p>
             </div>
 
@@ -874,6 +987,62 @@ function WorkOrderDashboardInner() {
                     <option value="URGENT">URGENT</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Service Team & Scheduled Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{language === "en" ? "Service Team" : "ทีมปฏิบัติงาน"}</label>
+                  <select
+                    value={newServiceTeam}
+                    onChange={(e) => {
+                      const team = e.target.value as "TECHNICIAN" | "HOUSEKEEPING";
+                      setNewServiceTeam(team);
+                      setNewAssigneeId("");
+                    }}
+                    className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none"
+                  >
+                    <option value="TECHNICIAN">{language === "en" ? "Technician" : "งานช่าง"}</option>
+                    <option value="HOUSEKEEPING">{language === "en" ? "Housekeeping" : "งานแม่บ้าน"}</option>
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{language === "en" ? "Scheduled Date" : "กำหนดเริ่มงาน"}</label>
+                  <input
+                    type="datetime-local"
+                    value={newScheduledAt}
+                    onChange={(e) => setNewScheduledAt(e.target.value)}
+                    className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none text-slate-800 dark:text-slate-100"
+                  />
+                </div>
+              </div>
+
+              {/* Assignee Selection */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  {newServiceTeam === "TECHNICIAN"
+                    ? (language === "en" ? "Assign Technician" : "มอบหมายช่างเทคนิค")
+                    : (language === "en" ? "Assign Housekeeper" : "มอบหมายแม่บ้าน")}
+                </label>
+                <select
+                  value={newAssigneeId}
+                  onChange={(e) => setNewAssigneeId(e.target.value)}
+                  className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none"
+                >
+                  <option value="">-- UNASSIGNED --</option>
+                  {newServiceTeam === "TECHNICIAN"
+                    ? technicians.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.full_name || t.display_name}
+                        </option>
+                      ))
+                    : housekeepers.map((h) => (
+                        <option key={h.id} value={h.id}>
+                          {h.full_name || h.display_name}
+                        </option>
+                      ))}
+                </select>
               </div>
 
               {/* Description */}

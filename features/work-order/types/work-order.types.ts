@@ -24,6 +24,7 @@ export interface WorkOrder {
   description: string | null;
   priority: WorkOrderPriority;
   status: WorkOrderStatus;
+  service_team: "TECHNICIAN" | "HOUSEKEEPING";
   assigned_to: string | null;
   requested_at: string;
   scheduled_at: string | null;
@@ -58,6 +59,7 @@ export interface CreateWorkOrderDto {
   description?: string | null;
   priority?: WorkOrderPriority;
   status?: WorkOrderStatus;
+  service_team?: "TECHNICIAN" | "HOUSEKEEPING";
   assigned_to?: string | null;
   scheduled_at?: string | null;
   created_by?: string | null;
@@ -69,6 +71,7 @@ export interface UpdateWorkOrderDto {
   description?: string | null;
   priority?: WorkOrderPriority;
   status?: WorkOrderStatus;
+  service_team?: "TECHNICIAN" | "HOUSEKEEPING";
   assigned_to?: string | null;
   scheduled_at?: string | null;
   started_at?: string | null;

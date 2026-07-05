@@ -22,6 +22,7 @@ interface WorkOrderDbRow {
   description: string | null;
   priority: string;
   status: string;
+  service_team: string;
   assigned_to: string | null;
   requested_at: string;
   scheduled_at: string | null;
@@ -128,6 +129,7 @@ function mapToWorkOrder(row: WorkOrderDbRow): WorkOrder {
     description: row.description,
     priority: row.priority as WorkOrderPriority,
     status: row.status as WorkOrderStatus,
+    service_team: row.service_team as "TECHNICIAN" | "HOUSEKEEPING",
     assigned_to: row.assigned_to,
     requested_at: row.requested_at,
     scheduled_at: row.scheduled_at,
@@ -290,6 +292,7 @@ export async function create(dto: CreateWorkOrderDto): Promise<WorkOrder> {
     description: dto.description || null,
     priority: dto.priority || "NORMAL",
     status: dto.status || "NEW",
+    service_team: dto.service_team || "TECHNICIAN",
     assigned_to: dto.assigned_to || null,
     scheduled_at: dto.scheduled_at || null,
     created_by: dto.created_by || null,
@@ -317,6 +320,7 @@ export async function update(id: string, dto: UpdateWorkOrderDto): Promise<WorkO
   if (dto.description !== undefined) payload.description = dto.description;
   if (dto.priority !== undefined) payload.priority = dto.priority;
   if (dto.status !== undefined) payload.status = dto.status;
+  if (dto.service_team !== undefined) payload.service_team = dto.service_team;
   if (dto.assigned_to !== undefined) payload.assigned_to = dto.assigned_to;
   if (dto.scheduled_at !== undefined) payload.scheduled_at = dto.scheduled_at;
   if (dto.started_at !== undefined) payload.started_at = dto.started_at;

@@ -39,10 +39,19 @@ export async function GET(request: Request) {
 
     const isAdmin = profile && ["admin", "super_admin", "property_admin"].includes(profile.role);
     const isTechnician = profile && profile.role === "technician";
+    const isHousekeeper = profile && profile.role === "housekeeping";
 
     // Security check:
-    // Residents can only view work orders created by them or matching their assignments
-    if (!isAdmin && !isTechnician) {
+    if (isAdmin) {
+      // Admins see all work orders
+    } else if (isTechnician) {
+      // Technicians only see technician jobs assigned to them
+      orders = orders.filter((o) => o.service_team === "TECHNICIAN" && o.assigned_to === user.id);
+    } else if (isHousekeeper) {
+      // Housekeepers only see housekeeping jobs assigned to them
+      orders = orders.filter((o) => o.service_team === "HOUSEKEEPING" && o.assigned_to === user.id);
+    } else {
+      // Residents can only view work orders created by them or matching their assignments
       // Find person
       const { data: person } = await supabase
         .from("persons")
@@ -66,9 +75,6 @@ export async function GET(request: Request) {
           (o.resident_assignment_id && assignmentIds.includes(o.resident_assignment_id))
         );
       }
-    } else if (isTechnician) {
-      // Technicians see orders assigned to them
-      orders = orders.filter((o) => o.assigned_to === user.id);
     }
 
     return NextResponse.json({
