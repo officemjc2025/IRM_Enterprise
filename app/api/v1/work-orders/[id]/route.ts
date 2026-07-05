@@ -78,6 +78,13 @@ export async function GET(request: Request, { params }: Params) {
       }
     }
 
+    if (!isAdmin && order) {
+      order.actual_cost = null;
+      if (!isTechnician && !isHousekeeper) {
+        order.charge_amount = null;
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: "Work order retrieved successfully",
@@ -147,6 +154,11 @@ export async function PUT(request: Request, { params }: Params) {
     }
 
     const body = await request.json();
+    if (!isAdmin) {
+      delete body.charge_amount;
+      delete body.actual_cost;
+    }
+
     const updated = await workOrderService.updateWorkOrder(id, {
       ...body,
       updated_by: user.id,
@@ -157,6 +169,10 @@ export async function PUT(request: Request, { params }: Params) {
         { success: false, message: "Work order not found or update failed" },
         { status: 404 }
       );
+    }
+
+    if (!isAdmin) {
+      updated.actual_cost = null;
     }
 
     return NextResponse.json({

@@ -84,6 +84,22 @@ interface WorkOrderDbRow {
     email: string;
     phone: string | null;
   } | null;
+
+  acknowledged_at?: string | null;
+  acknowledged_by?: string | null;
+  work_performed?: string | null;
+  additional_work?: string | null;
+  worker_remark?: string | null;
+  charge_amount?: number | null;
+  actual_cost?: number | null;
+  work_order_photos?: Array<{
+    id: string;
+    work_order_id: string;
+    photo_stage: string;
+    storage_path: string;
+    uploaded_by: string | null;
+    created_at: string;
+  }> | null;
 }
 
 function mapToWorkOrder(row: WorkOrderDbRow): WorkOrder {
@@ -142,6 +158,14 @@ function mapToWorkOrder(row: WorkOrderDbRow): WorkOrder {
     updated_by: row.updated_by,
     deleted_at: row.deleted_at,
 
+    acknowledged_at: row.acknowledged_at,
+    acknowledged_by: row.acknowledged_by,
+    work_performed: row.work_performed,
+    additional_work: row.additional_work,
+    worker_remark: row.worker_remark,
+    charge_amount: row.charge_amount,
+    actual_cost: row.actual_cost,
+
     property: row.properties ? {
       id: row.properties.id,
       code: "",
@@ -176,6 +200,17 @@ function mapToWorkOrder(row: WorkOrderDbRow): WorkOrder {
       email: row.assignees.email,
       phone: row.assignees.phone,
     } : null,
+
+    photos: row.work_order_photos
+      ? row.work_order_photos.map((p) => ({
+          id: p.id,
+          work_order_id: p.work_order_id,
+          photo_stage: p.photo_stage as "BEFORE" | "AFTER",
+          storage_path: p.storage_path,
+          uploaded_by: p.uploaded_by,
+          created_at: p.created_at,
+        }))
+      : [],
   };
 }
 
@@ -187,7 +222,8 @@ const SELECT_QUERY = `
     *,
     persons:person_id (*)
   ),
-  assignees:assigned_to (id, full_name, display_name, email, phone)
+  assignees:assigned_to (id, full_name, display_name, email, phone),
+  work_order_photos (*)
 `;
 
 export async function findAll(): Promise<WorkOrder[]> {
@@ -327,6 +363,14 @@ export async function update(id: string, dto: UpdateWorkOrderDto): Promise<WorkO
   if (dto.completed_at !== undefined) payload.completed_at = dto.completed_at;
   if (dto.closed_at !== undefined) payload.closed_at = dto.closed_at;
   if (dto.updated_by !== undefined) payload.updated_by = dto.updated_by;
+
+  if (dto.acknowledged_at !== undefined) payload.acknowledged_at = dto.acknowledged_at;
+  if (dto.acknowledged_by !== undefined) payload.acknowledged_by = dto.acknowledged_by;
+  if (dto.work_performed !== undefined) payload.work_performed = dto.work_performed;
+  if (dto.additional_work !== undefined) payload.additional_work = dto.additional_work;
+  if (dto.worker_remark !== undefined) payload.worker_remark = dto.worker_remark;
+  if (dto.charge_amount !== undefined) payload.charge_amount = dto.charge_amount;
+  if (dto.actual_cost !== undefined) payload.actual_cost = dto.actual_cost;
 
   payload.updated_at = new Date().toISOString();
 

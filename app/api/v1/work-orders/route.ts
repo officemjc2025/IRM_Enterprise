@@ -77,6 +77,15 @@ export async function GET(request: Request) {
       }
     }
 
+    if (!isAdmin) {
+      orders.forEach((o) => {
+        o.actual_cost = null;
+        if (!isTechnician && !isHousekeeper) {
+          o.charge_amount = null;
+        }
+      });
+    }
+
     return NextResponse.json({
       success: true,
       message: "Work orders retrieved successfully",

@@ -13,6 +13,15 @@ export type WorkOrderStatus =
   | "CLOSED"
   | "CANCELLED";
 
+export interface WorkOrderPhoto {
+  id: string;
+  work_order_id: string;
+  photo_stage: "BEFORE" | "AFTER";
+  storage_path: string;
+  uploaded_by: string | null;
+  created_at: string;
+}
+
 export interface WorkOrder {
   id: string;
   work_order_code: string;
@@ -37,6 +46,15 @@ export interface WorkOrder {
   updated_by?: string | null;
   deleted_at?: string | null;
 
+  // Mobile/Execution fields
+  acknowledged_at?: string | null;
+  acknowledged_by?: string | null;
+  work_performed?: string | null;
+  additional_work?: string | null;
+  worker_remark?: string | null;
+  charge_amount?: number | null;
+  actual_cost?: number | null;
+
   // Relations
   property?: Property | null;
   unit?: Unit | null;
@@ -48,6 +66,7 @@ export interface WorkOrder {
     email: string | null;
     phone: string | null;
   } | null;
+  photos?: WorkOrderPhoto[] | null;
 }
 
 export interface CreateWorkOrderDto {
@@ -78,4 +97,12 @@ export interface UpdateWorkOrderDto {
   completed_at?: string | null;
   closed_at?: string | null;
   updated_by?: string | null;
+
+  acknowledged_at?: string | null;
+  acknowledged_by?: string | null;
+  work_performed?: string | null;
+  additional_work?: string | null;
+  worker_remark?: string | null;
+  charge_amount?: number | null;
+  actual_cost?: number | null;
 }

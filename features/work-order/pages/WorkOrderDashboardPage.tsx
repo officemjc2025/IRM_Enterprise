@@ -3,7 +3,7 @@
 import React, { useEffect, useState, Suspense } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useLanguage } from "@/providers/LanguageProvider";
-import { WorkOrder, WorkOrderStatus, WorkOrderPriority } from "@/features/work-order/types/work-order.types";
+import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderPhoto } from "@/features/work-order/types/work-order.types";
 import { PageHeader, SearchInput, EmptyState, LoadingState } from "@/shared/ui";
 import { createClient } from "@/lib/supabase/client";
 import { User } from "@supabase/supabase-js";
@@ -61,6 +61,28 @@ function WorkOrderDashboardInner() {
   const [priorityVal, setPriorityVal] = useState<WorkOrderPriority>("NORMAL");
   const [scheduledAtVal, setScheduledAtVal] = useState("");
   const [serviceTeamVal, setServiceTeamVal] = useState<"TECHNICIAN" | "HOUSEKEEPING">("TECHNICIAN");
+
+  const [workPerformed, setWorkPerformed] = useState("");
+  const [additionalWork, setAdditionalWork] = useState("");
+  const [workerRemark, setWorkerRemark] = useState("");
+  const [chargeAmountVal, setChargeAmountVal] = useState("");
+  const [actualCostVal, setActualCostVal] = useState("");
+
+  useEffect(() => {
+    if (selectedOrder) {
+      setWorkPerformed(selectedOrder.work_performed || "");
+      setAdditionalWork(selectedOrder.additional_work || "");
+      setWorkerRemark(selectedOrder.worker_remark || "");
+      setChargeAmountVal(selectedOrder.charge_amount !== null && selectedOrder.charge_amount !== undefined ? selectedOrder.charge_amount.toString() : "");
+      setActualCostVal(selectedOrder.actual_cost !== null && selectedOrder.actual_cost !== undefined ? selectedOrder.actual_cost.toString() : "");
+    } else {
+      setWorkPerformed("");
+      setAdditionalWork("");
+      setWorkerRemark("");
+      setChargeAmountVal("");
+      setActualCostVal("");
+    }
+  }, [selectedOrder]);
 
   // Create Ticket Modal State (Admin)
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -203,12 +225,35 @@ function WorkOrderDashboardInner() {
     }
   };
 
+  const refreshOrderDetails = async (orderId: string) => {
+    try {
+      const res = await fetch(`/api/v1/work-orders/${orderId}`);
+      const json = await res.json();
+      if (json.success) {
+        setSelectedOrder(json.data);
+      }
+      refreshData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleUpdateStatus = async (orderId: string, nextStatus: WorkOrderStatus) => {
+    if (nextStatus === "COMPLETED" && !workPerformed.trim()) {
+      alert(language === "en" ? "Please fill in the Work Performed details before completing." : "กรุณาระบุรายละเอียดงานที่ปฏิบัติก่อนเสร็จสิ้นงาน");
+      return;
+    }
+
     try {
       const res = await fetch(`/api/v1/work-orders/${orderId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: nextStatus }),
+        body: JSON.stringify({ 
+          status: nextStatus,
+          work_performed: workPerformed.trim() || null,
+          additional_work: additionalWork.trim() || null,
+          worker_remark: workerRemark.trim() || null,
+        }),
       });
 
       const json = await res.json();
@@ -218,7 +263,59 @@ function WorkOrderDashboardInner() {
         }
         refreshData();
       } else {
-        alert(json.message || "Failed to update state");
+        alert(json.message || "Failed to update status");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAcknowledge = async (orderId: string) => {
+    try {
+      const res = await fetch(`/api/v1/work-orders/${orderId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          acknowledged_at: new Date().toISOString(),
+          acknowledged_by: currentUser?.id,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        if (selectedOrder && selectedOrder.id === orderId) {
+          setSelectedOrder(json.data);
+        }
+        refreshData();
+      } else {
+        alert(json.message || "Failed to acknowledge job");
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleSaveDraft = async (orderId: string) => {
+    try {
+      const res = await fetch(`/api/v1/work-orders/${orderId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          work_performed: workPerformed.trim() || null,
+          additional_work: additionalWork.trim() || null,
+          worker_remark: workerRemark.trim() || null,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        if (selectedOrder && selectedOrder.id === orderId) {
+          setSelectedOrder(json.data);
+        }
+        alert(language === "en" ? "Draft saved successfully" : "บันทึกร่างสำเร็จ");
+        refreshData();
+      } else {
+        alert(json.message || "Failed to save draft");
       }
     } catch (err) {
       console.error(err);
@@ -235,6 +332,8 @@ function WorkOrderDashboardInner() {
           priority: priorityVal,
           service_team: serviceTeamVal,
           scheduled_at: scheduledAtVal ? new Date(scheduledAtVal).toISOString() : null,
+          charge_amount: chargeAmountVal ? parseFloat(chargeAmountVal) : null,
+          actual_cost: actualCostVal ? parseFloat(actualCostVal) : null,
         }),
       });
 
@@ -638,7 +737,7 @@ function WorkOrderDashboardInner() {
         >
           <div 
             onClick={(e) => e.stopPropagation()}
-            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-md w-full shadow-2xl p-6 relative flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150"
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl p-6 relative flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150"
           >
             {/* Close Button */}
             <button
@@ -667,12 +766,10 @@ function WorkOrderDashboardInner() {
                 <span className="text-slate-400">{language === "en" ? "Category" : "หมวดหมู่"}:</span>
                 <span className="col-span-2 text-slate-800 dark:text-slate-200 font-semibold">{selectedOrder.category}</span>
               </div>
-              {selectedOrder.description && (
-                <div className="grid grid-cols-3">
-                  <span className="text-slate-400">{language === "en" ? "Description" : "รายละเอียด"}:</span>
-                  <span className="col-span-2 text-slate-700 dark:text-slate-300 italic">{selectedOrder.description}</span>
-                </div>
-              )}
+              <div className="grid grid-cols-3">
+                <span className="text-slate-400">{language === "en" ? "Original Scope" : "ขอบเขตดั้งเดิม"}:</span>
+                <span className="col-span-2 text-slate-700 dark:text-slate-300 italic">{selectedOrder.description || "-"}</span>
+              </div>
               <div className="grid grid-cols-3">
                 <span className="text-slate-400">{language === "en" ? "Property" : "โครงการ"}:</span>
                 <span className="col-span-2 text-slate-700 dark:text-slate-300">
@@ -696,8 +793,12 @@ function WorkOrderDashboardInner() {
                 </div>
               )}
               <div className="grid grid-cols-3">
-                <span className="text-slate-400">{language === "en" ? "Requested At" : "แจ้งเรื่องเมื่อ"}:</span>
-                <span className="col-span-2 text-slate-500 font-mono text-xs">{new Date(selectedOrder.requested_at).toLocaleString()}</span>
+                <span className="text-slate-400">{language === "en" ? "Acknowledgement" : "การตอบรับงาน"}:</span>
+                <span className="col-span-2 text-slate-700 dark:text-slate-300 font-semibold">
+                  {selectedOrder.acknowledged_at
+                    ? `${language === "en" ? "Accepted at" : "ตอบรับเมื่อ"} ${new Date(selectedOrder.acknowledged_at).toLocaleString()}`
+                    : (language === "en" ? "Pending Acceptance" : "ยังไม่ได้ตอบรับงาน")}
+                </span>
               </div>
               {selectedOrder.started_at && (
                 <div className="grid grid-cols-3">
@@ -711,6 +812,101 @@ function WorkOrderDashboardInner() {
                   <span className="col-span-2 text-slate-500 font-mono text-xs">{new Date(selectedOrder.completed_at).toLocaleString()}</span>
                 </div>
               )}
+              {!isAdmin && selectedOrder.charge_amount !== null && selectedOrder.charge_amount !== undefined && (
+                <div className="grid grid-cols-3">
+                  <span className="text-slate-400">{language === "en" ? "Charge Amount" : "จำนวนเงินเรียกเก็บ"}:</span>
+                  <span className="col-span-2 text-slate-700 dark:text-slate-300 font-bold">{selectedOrder.charge_amount} THB</span>
+                </div>
+              )}
+            </div>
+
+            {/* Execution details inputs */}
+            {(isTechnician && selectedOrder.status === "IN_PROGRESS" && selectedOrder.assigned_to === currentUser?.id) ? (
+              <div className="space-y-3 pt-2">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                  📝 {language === "en" ? "Execution details" : "รายละเอียดการปฏิบัติงาน"}
+                </span>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">{language === "en" ? "Work Performed (Required)" : "งานที่ทำ (จำเป็น)"}</label>
+                  <textarea
+                    required
+                    value={workPerformed}
+                    onChange={(e) => setWorkPerformed(e.target.value)}
+                    rows={2}
+                    className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs dark:bg-slate-900 outline-none"
+                    placeholder="Describe repair/work done..."
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">{language === "en" ? "Additional Work" : "งานเพิ่มเติม"}</label>
+                  <textarea
+                    value={additionalWork}
+                    onChange={(e) => setAdditionalWork(e.target.value)}
+                    rows={2}
+                    className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs dark:bg-slate-900 outline-none"
+                    placeholder="Describe extra work done..."
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">{language === "en" ? "Worker Remark" : "หมายเหตุผู้ทำ"}</label>
+                  <textarea
+                    value={workerRemark}
+                    onChange={(e) => setWorkerRemark(e.target.value)}
+                    rows={2}
+                    className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs dark:bg-slate-900 outline-none"
+                    placeholder="Internal worker comments..."
+                  />
+                </div>
+              </div>
+            ) : (
+              (selectedOrder.work_performed || selectedOrder.additional_work || selectedOrder.worker_remark) && (
+                <div className="bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg border border-slate-100 dark:border-slate-800 space-y-2 text-xs">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    📝 {language === "en" ? "Execution details" : "รายละเอียดการปฏิบัติงาน"}
+                  </span>
+                  {selectedOrder.work_performed && (
+                    <div>
+                      <span className="text-slate-400 font-bold">{language === "en" ? "Work Performed" : "งานที่ทำ"}: </span>
+                      <span className="text-slate-700 dark:text-slate-300 font-semibold">{selectedOrder.work_performed}</span>
+                    </div>
+                  )}
+                  {selectedOrder.additional_work && (
+                    <div>
+                      <span className="text-slate-400 font-bold">{language === "en" ? "Additional Work" : "งานเพิ่มเติม"}: </span>
+                      <span className="text-slate-700 dark:text-slate-300">{selectedOrder.additional_work}</span>
+                    </div>
+                  )}
+                  {selectedOrder.worker_remark && (
+                    <div>
+                      <span className="text-slate-400 font-bold">{language === "en" ? "Worker Remark" : "หมายเหตุ"}: </span>
+                      <span className="text-slate-700 dark:text-slate-300">{selectedOrder.worker_remark}</span>
+                    </div>
+                  )}
+                </div>
+              )
+            )}
+
+            {/* Photos Section */}
+            <div className="border-t border-slate-100 dark:border-slate-700/60 pt-3 space-y-4">
+              <WorkOrderPhotoSection
+                orderId={selectedOrder.id}
+                stage="BEFORE"
+                photos={selectedOrder.photos?.filter((p) => p.photo_stage === "BEFORE") || []}
+                canUpload={(isTechnician && selectedOrder.status === "IN_PROGRESS") || (isTechnician && selectedOrder.status === "ASSIGNED" && !!selectedOrder.acknowledged_at)}
+                canDelete={isTechnician && selectedOrder.status === "IN_PROGRESS"}
+                onRefresh={() => refreshOrderDetails(selectedOrder.id)}
+              />
+              <WorkOrderPhotoSection
+                orderId={selectedOrder.id}
+                stage="AFTER"
+                photos={selectedOrder.photos?.filter((p) => p.photo_stage === "AFTER") || []}
+                canUpload={isTechnician && selectedOrder.status === "IN_PROGRESS"}
+                canDelete={isTechnician && selectedOrder.status === "IN_PROGRESS"}
+                onRefresh={() => refreshOrderDetails(selectedOrder.id)}
+              />
             </div>
 
             {/* Admin Controls Panel */}
@@ -790,6 +986,34 @@ function WorkOrderDashboardInner() {
                   />
                 </div>
 
+                {/* Financial Fields */}
+                <div className="flex gap-2">
+                  <div className="flex-1 flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">{language === "en" ? "Charge Amount" : "จำนวนเงินเรียกเก็บ"}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={chargeAmountVal}
+                      onChange={(e) => setChargeAmountVal(e.target.value)}
+                      className="p-1.5 border border-slate-200 dark:border-slate-700 rounded text-xs dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none"
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="flex-1 flex flex-col gap-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">{language === "en" ? "Actual Cost" : "ต้นทุนจริง"}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={actualCostVal}
+                      onChange={(e) => setActualCostVal(e.target.value)}
+                      className="p-1.5 border border-slate-200 dark:border-slate-700 rounded text-xs dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+
                 <div className="flex justify-end gap-2 pt-1">
                   {selectedOrder.status === "COMPLETED" && (
                     <button
@@ -818,37 +1042,54 @@ function WorkOrderDashboardInner() {
                   🔧 Technician Job Controls
                 </span>
 
-                <div className="flex gap-2">
-                  {selectedOrder.status === "ASSIGNED" && (
+                <div className="flex flex-col gap-2">
+                  {selectedOrder.status === "ASSIGNED" && !selectedOrder.acknowledged_at && (
+                    <button
+                      onClick={() => handleAcknowledge(selectedOrder.id)}
+                      className="w-full px-3 py-2 bg-[#D4AF37] hover:bg-[#b8952b] text-white text-xs font-bold rounded-lg transition"
+                    >
+                      {language === "en" ? "Acknowledge & Accept Job" : "ตอบรับและยอมรับงาน"}
+                    </button>
+                  )}
+
+                  {selectedOrder.status === "ASSIGNED" && selectedOrder.acknowledged_at && (
                     <button
                       onClick={() => handleUpdateStatus(selectedOrder.id, "IN_PROGRESS")}
-                      className="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition"
+                      className="w-full px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition"
                     >
                       {language === "en" ? "▶ Start Job" : "เริ่มงาน"}
                     </button>
                   )}
 
                   {selectedOrder.status === "IN_PROGRESS" && (
-                    <>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleUpdateStatus(selectedOrder.id, "ON_HOLD")}
+                          className="flex-1 px-3 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold rounded-lg transition"
+                        >
+                          {language === "en" ? "⏸ Pause Job" : "พักการทำงาน (Hold)"}
+                        </button>
+                        <button
+                          onClick={() => handleUpdateStatus(selectedOrder.id, "COMPLETED")}
+                          className="flex-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-xs font-bold rounded-lg transition"
+                        >
+                          {language === "en" ? "✅ Complete Job" : "งานเสร็จสิ้น"}
+                        </button>
+                      </div>
                       <button
-                        onClick={() => handleUpdateStatus(selectedOrder.id, "ON_HOLD")}
-                        className="flex-1 px-3 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-xs font-bold rounded-lg transition"
+                        onClick={() => handleSaveDraft(selectedOrder.id)}
+                        className="w-full px-3 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-bold rounded-lg transition"
                       >
-                        {language === "en" ? "⏸ Pause Job" : "พักการทำงาน (Hold)"}
+                        {language === "en" ? "💾 Save Draft" : "บันทึกร่าง"}
                       </button>
-                      <button
-                        onClick={() => handleUpdateStatus(selectedOrder.id, "COMPLETED")}
-                        className="flex-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white text-xs font-bold rounded-lg transition"
-                      >
-                        {language === "en" ? "✅ Complete Job" : "งานเสร็จสิ้น"}
-                      </button>
-                    </>
+                    </div>
                   )}
 
                   {selectedOrder.status === "ON_HOLD" && (
                     <button
                       onClick={() => handleUpdateStatus(selectedOrder.id, "IN_PROGRESS")}
-                      className="flex-1 px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition"
+                      className="w-full px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition"
                     >
                       {language === "en" ? "▶ Resume Job" : "ทำงานต่อ"}
                     </button>
@@ -1088,5 +1329,124 @@ export default function WorkOrderDashboardPage() {
         <WorkOrderDashboardInner />
       </Suspense>
     </MainLayout>
+  );
+}
+
+function WorkOrderPhotoSection({ 
+  orderId, 
+  stage, 
+  photos, 
+  canUpload, 
+  canDelete, 
+  onRefresh 
+}: { 
+  orderId: string; 
+  stage: "BEFORE" | "AFTER"; 
+  photos: WorkOrderPhoto[]; 
+  canUpload: boolean; 
+  canDelete: boolean; 
+  onRefresh: () => void; 
+}) {
+  const supabase = createClient();
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    setUploading(true);
+    try {
+      const file = e.target.files[0];
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("photo_stage", stage);
+
+      const res = await fetch(`/api/v1/work-orders/${orderId}/photos`, {
+        method: "POST",
+        body: formData,
+      });
+      const json = await res.json();
+      if (json.success) {
+        onRefresh();
+      } else {
+        alert(json.message || "Upload failed");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (photoId: string) => {
+    if (!confirm("Are you sure you want to delete this photo?")) return;
+    try {
+      const res = await fetch(`/api/v1/work-orders/${orderId}/photos?photo_id=${photoId}`, {
+        method: "DELETE",
+      });
+      const json = await res.json();
+      if (json.success) {
+        onRefresh();
+      } else {
+        alert(json.message || "Delete failed");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Delete failed");
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+        {stage === "BEFORE" ? "Before Work Photos" : "After Work Photos"}
+      </span>
+      <div className="grid grid-cols-3 gap-2">
+        {photos.map((p) => (
+          <PhotoThumbnail key={p.id} path={p.storage_path} onDelete={canDelete ? () => handleDelete(p.id) : undefined} />
+        ))}
+        {canUpload && (
+          <label className="border border-dashed border-slate-300 dark:border-slate-700 hover:border-[#D4AF37] rounded-lg p-2 flex flex-col items-center justify-center cursor-pointer transition text-slate-400 hover:text-slate-600 h-20 bg-slate-50 dark:bg-slate-900/30">
+            <input type="file" accept="image/*" capture="environment" onChange={handleUpload} className="hidden" disabled={uploading} />
+            {uploading ? (
+              <span className="text-[10px] font-semibold animate-pulse">Uploading...</span>
+            ) : (
+              <>
+                <span className="text-lg">📷</span>
+                <span className="text-[9px] font-semibold mt-1">Add Photo</span>
+              </>
+            )}
+          </label>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PhotoThumbnail({ path, onDelete }: { path: string; onDelete?: () => void }) {
+  const supabase = createClient();
+  const [url, setUrl] = useState<string>("");
+
+  useEffect(() => {
+    supabase.storage.from("work-orders").createSignedUrl(path, 3600).then(({ data }) => {
+      if (data?.signedUrl) setUrl(data.signedUrl);
+    });
+  }, [path, supabase]);
+
+  if (!url) {
+    return <div className="bg-slate-100 dark:bg-slate-900 animate-pulse rounded-lg h-20" />;
+  }
+
+  return (
+    <div className="relative group rounded-lg overflow-hidden h-20 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+      <img src={url} alt="Job thumbnail" className="w-full h-full object-cover" />
+      {onDelete && (
+        <button
+          onClick={onDelete}
+          className="absolute top-1 right-1 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 text-[8px] font-bold shadow opacity-0 group-hover:opacity-100 transition duration-150"
+        >
+          ✕
+        </button>
+      )}
+    </div>
   );
 }
