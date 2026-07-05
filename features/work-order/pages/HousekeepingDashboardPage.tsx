@@ -3,7 +3,7 @@
 import React, { useEffect, useState, Suspense } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useLanguage } from "@/providers/LanguageProvider";
-import { WorkOrder, WorkOrderStatus, WorkOrderPhoto } from "@/features/work-order/types/work-order.types";
+import { WorkOrder, WorkOrderStatus, WorkOrderPhoto, AttentionStatus, deriveAttentionStatus } from "@/features/work-order/types/work-order.types";
 import { PageHeader, SearchInput, EmptyState, LoadingState } from "@/shared/ui";
 import { createClient } from "@/lib/supabase/client";
 import { User } from "@supabase/supabase-js";
@@ -27,6 +27,12 @@ function HousekeepingDashboardInner() {
   const [additionalWork, setAdditionalWork] = useState("");
   const [workerRemark, setWorkerRemark] = useState("");
 
+  const [showRescheduleForm, setShowRescheduleForm] = useState(false);
+  const [newRescheduleDate, setNewRescheduleDate] = useState("");
+  const [newRescheduleTime, setNewRescheduleTime] = useState("");
+  const [rescheduleReason, setRescheduleReason] = useState("");
+  const [rescheduleSaving, setRescheduleSaving] = useState(false);
+
   useEffect(() => {
     if (selectedOrder) {
       setWorkPerformed(selectedOrder.work_performed || "");
@@ -37,7 +43,28 @@ function HousekeepingDashboardInner() {
       setAdditionalWork("");
       setWorkerRemark("");
     }
+    setShowRescheduleForm(false);
+    setNewRescheduleDate("");
+    setNewRescheduleTime("");
+    setRescheduleReason("");
   }, [selectedOrder]);
+
+  const formatBangkokTime = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "-";
+    try {
+      return new Intl.DateTimeFormat(language === "en" ? "en-US" : "th-TH", {
+        timeZone: "Asia/Bangkok",
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      }).format(new Date(dateStr));
+    } catch (e) {
+      return new Date(dateStr).toLocaleString();
+    }
+  };
 
   const loadInitialData = async () => {
     try {
@@ -294,6 +321,7 @@ function HousekeepingDashboardInner() {
                   <th className="p-4">{language === "en" ? "Property & Room" : "ห้องชุด / โครงการ"}</th>
                   <th className="p-4">{language === "en" ? "Priority" : "ความสำคัญ"}</th>
                   <th className="p-4">{language === "en" ? "Status" : "สถานะ"}</th>
+                  <th className="p-4">{language === "en" ? "Attention" : "สถานะดำเนินการ"}</th>
                   <th className="p-4 text-right">{language === "en" ? "Actions" : "การควบคุม"}</th>
                 </tr>
               </thead>
@@ -348,6 +376,31 @@ function HousekeepingDashboardInner() {
                             : "bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-500"
                         }`}>
                           {wo.status}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-1.5 py-0.5 rounded font-bold text-[9px] ${
+                          (() => {
+                            const attStatus = deriveAttentionStatus(wo);
+                            return attStatus === "PENDING_RESCHEDULE_APPROVAL"
+                              ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-400 border border-yellow-300 animate-pulse font-bold"
+                              : attStatus === "RESCHEDULE_REJECTED"
+                              ? "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400"
+                              : attStatus === "RESCHEDULE_APPROVED"
+                              ? "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-400"
+                              : attStatus === "CANCELLED"
+                              ? "bg-slate-100 text-slate-500 dark:bg-slate-900"
+                              : "bg-slate-50 text-slate-400 dark:bg-slate-900";
+                          })()
+                        }`}>
+                          {(() => {
+                            const attStatus = deriveAttentionStatus(wo);
+                            return attStatus === "PENDING_RESCHEDULE_APPROVAL" ? (language === "en" ? "PENDING RESCHEDULE" : "รออนุมัติเลื่อนนัด") :
+                              attStatus === "RESCHEDULE_REJECTED" ? (language === "en" ? "REJECTED" : "คำขอเลื่อนถูกปฏิเสธ") :
+                              attStatus === "RESCHEDULE_APPROVED" ? (language === "en" ? "APPROVED" : "อนุมัติเลื่อนนัดแล้ว") :
+                              attStatus === "CANCELLED" ? (language === "en" ? "CANCELLED" : "ยกเลิกคำขอ") :
+                              (language === "en" ? "NORMAL" : "ปกติ");
+                          })()}
                         </span>
                       </td>
                       <td className="p-4 text-right whitespace-nowrap">
@@ -423,27 +476,27 @@ function HousekeepingDashboardInner() {
               {selectedOrder.scheduled_at && (
                 <div className="grid grid-cols-3">
                   <span className="text-slate-400">{language === "en" ? "Scheduled At" : "กำหนดเริ่มงาน"}:</span>
-                  <span className="col-span-2 text-slate-500 font-mono text-xs">{new Date(selectedOrder.scheduled_at).toLocaleString()}</span>
+                  <span className="col-span-2 text-slate-500 font-mono text-xs">{formatBangkokTime(selectedOrder.scheduled_at)}</span>
                 </div>
               )}
               <div className="grid grid-cols-3">
                 <span className="text-slate-400">{language === "en" ? "Acknowledgement" : "การตอบรับงาน"}:</span>
                 <span className="col-span-2 text-slate-700 dark:text-slate-300 font-semibold">
                   {selectedOrder.acknowledged_at
-                    ? `${language === "en" ? "Accepted at" : "ตอบรับเมื่อ"} ${new Date(selectedOrder.acknowledged_at).toLocaleString()}`
+                    ? `${language === "en" ? "Accepted at" : "ตอบรับเมื่อ"} ${formatBangkokTime(selectedOrder.acknowledged_at)}`
                     : (language === "en" ? "Pending Acceptance" : "ยังไม่ได้ตอบรับงาน")}
                 </span>
               </div>
               {selectedOrder.started_at && (
                 <div className="grid grid-cols-3">
                   <span className="text-slate-400">{language === "en" ? "Started At" : "เริ่มงานเมื่อ"}:</span>
-                  <span className="col-span-2 text-slate-500 font-mono text-xs">{new Date(selectedOrder.started_at).toLocaleString()}</span>
+                  <span className="col-span-2 text-slate-500 font-mono text-xs">{formatBangkokTime(selectedOrder.started_at)}</span>
                 </div>
               )}
               {selectedOrder.completed_at && (
                 <div className="grid grid-cols-3">
                   <span className="text-slate-400">{language === "en" ? "Completed At" : "เสร็จสิ้นเมื่อ"}:</span>
-                  <span className="col-span-2 text-slate-500 font-mono text-xs">{new Date(selectedOrder.completed_at).toLocaleString()}</span>
+                  <span className="col-span-2 text-slate-500 font-mono text-xs">{formatBangkokTime(selectedOrder.completed_at)}</span>
                 </div>
               )}
             </div>
@@ -515,6 +568,173 @@ function HousekeepingDashboardInner() {
                   )}
                 </div>
               )
+            )}
+
+            {/* Rescheduling Section */}
+            {selectedOrder.assigned_to === currentUser?.id && (
+              <div className="border-t border-slate-100 dark:border-slate-700/60 pt-3 space-y-3">
+                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                  ⏰ {language === "en" ? "Schedule Management" : "การจัดการเวลานัดหมาย"}
+                </span>
+
+                {/* Pending Request Indicator */}
+                {selectedOrder.schedule_changes?.find((sc) => sc.status === "PENDING") ? (
+                  (() => {
+                    const pendingReq = selectedOrder.schedule_changes.find((sc) => sc.status === "PENDING")!;
+                    return (
+                      <div className="bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 p-2.5 rounded-lg text-xs space-y-1.5 text-slate-700 dark:text-slate-300">
+                        <div className="font-semibold text-yellow-800 dark:text-yellow-400">
+                          ⚠️ {language === "en" ? "Pending Reschedule Request" : "มีคำขอเลื่อนเวลาที่รอการอนุมัติ"}
+                        </div>
+                        <div>
+                          <strong>{language === "en" ? "Requested Time" : "เวลาที่ขอเลื่อน"}:</strong>{" "}
+                          <span className="font-mono">{formatBangkokTime(pendingReq.requested_scheduled_at)}</span>
+                        </div>
+                        <div>
+                          <strong>{language === "en" ? "Reason" : "เหตุผล"}:</strong> {pendingReq.reason}
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(language === "en" ? "Are you sure you want to cancel this request?" : "ยืนยันยกเลิกคำขอเลื่อนงาน?")) return;
+                            try {
+                              const res = await fetch(`/api/v1/work-orders/${selectedOrder.id}/schedule-changes`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  change_id: pendingReq.id,
+                                  status: "CANCELLED"
+                                }),
+                              });
+                              const json = await res.json();
+                              if (json.success) {
+                                refreshOrderDetails(selectedOrder.id);
+                              } else {
+                                alert(json.message || "Failed to cancel request");
+                              }
+                            } catch (err) {
+                              console.error(err);
+                            }
+                          }}
+                          className="w-full mt-1.5 py-1 text-center bg-red-100 hover:bg-red-200 text-red-700 font-semibold rounded text-[10px] transition"
+                        >
+                          ✕ {language === "en" ? "Cancel Request" : "ยกเลิกคำขอ"}
+                        </button>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  !showRescheduleForm ? (
+                    <button
+                      onClick={() => setShowRescheduleForm(true)}
+                      className="w-full py-1.5 text-center border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 rounded font-semibold text-xs transition text-slate-700 dark:text-slate-300"
+                    >
+                      {language === "en" ? "Request Reschedule" : "ขอเลื่อนวัน/เวลาปฏิบัติงาน"}
+                    </button>
+                  ) : (
+                    <div className="bg-slate-50 dark:bg-slate-900/40 p-3 rounded-lg border border-slate-200 dark:border-slate-700 space-y-2.5 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-slate-700 dark:text-slate-300">{language === "en" ? "New Schedule Request" : "สร้างคำขอเลื่อนงาน"}</span>
+                        <button onClick={() => setShowRescheduleForm(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold">✕</button>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        <div className="flex-1 flex flex-col gap-1">
+                          <label className="text-[10px] text-slate-500 font-bold uppercase">{language === "en" ? "Date" : "วันที่"}</label>
+                          <input
+                            type="date"
+                            value={newRescheduleDate}
+                            onChange={(e) => setNewRescheduleDate(e.target.value)}
+                            className="p-1 border border-slate-200 dark:border-slate-700 rounded dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none"
+                          />
+                        </div>
+                        <div className="flex-1 flex flex-col gap-1">
+                          <label className="text-[10px] text-slate-500 font-bold uppercase">{language === "en" ? "Time" : "เวลา"}</label>
+                          <input
+                            type="time"
+                            value={newRescheduleTime}
+                            onChange={(e) => setNewRescheduleTime(e.target.value)}
+                            className="p-1 border border-slate-200 dark:border-slate-700 rounded dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[10px] text-slate-500 font-bold uppercase">{language === "en" ? "Reason (Required)" : "เหตุผลการเลื่อนงาน (จำเป็น)"}</label>
+                        <textarea
+                          required
+                          value={rescheduleReason}
+                          onChange={(e) => setRescheduleReason(e.target.value)}
+                          rows={2}
+                          className="p-1.5 border border-slate-200 dark:border-slate-700 rounded dark:bg-slate-900 text-slate-800 dark:text-slate-100 outline-none"
+                          placeholder="Why is reschedule needed?"
+                        />
+                      </div>
+
+                      <button
+                        onClick={async () => {
+                          if (!newRescheduleDate || !newRescheduleTime) {
+                            alert(language === "en" ? "Date and Time are required" : "กรุณาระบุวันที่และเวลา");
+                            return;
+                          }
+                          if (!rescheduleReason.trim()) {
+                            alert(language === "en" ? "Reason is required" : "กรุณาระบุเหตุผล");
+                            return;
+                          }
+                          setRescheduleSaving(true);
+                          try {
+                            const newDateTime = new Date(`${newRescheduleDate}T${newRescheduleTime}`).toISOString();
+                            const res = await fetch(`/api/v1/work-orders/${selectedOrder.id}/schedule-changes`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                requested_scheduled_at: newDateTime,
+                                reason: rescheduleReason
+                              }),
+                            });
+                            const json = await res.json();
+                            if (json.success) {
+                              setShowRescheduleForm(false);
+                              refreshOrderDetails(selectedOrder.id);
+                            } else {
+                              alert(json.message || "Failed to request reschedule");
+                            }
+                          } catch (err) {
+                            console.error(err);
+                          } finally {
+                            setRescheduleSaving(false);
+                          }
+                        }}
+                        disabled={rescheduleSaving}
+                        className="w-full py-1.5 bg-[#D4AF37] hover:bg-[#b8952b] text-white text-xs font-bold rounded-lg transition"
+                      >
+                        {rescheduleSaving ? "Submitting..." : (language === "en" ? "Submit Request" : "ส่งคำขอเลื่อนงาน")}
+                      </button>
+                    </div>
+                  )
+                )}
+
+                {/* Historical Changes List */}
+                {selectedOrder.schedule_changes && selectedOrder.schedule_changes.filter(c => c.status !== "PENDING").length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{language === "en" ? "Schedule History" : "ประวัติการเลื่อนงาน"}</span>
+                    <div className="max-h-24 overflow-y-auto space-y-1 pr-1">
+                      {selectedOrder.schedule_changes.filter(c => c.status !== "PENDING").map((c) => (
+                        <div key={c.id} className="p-1.5 bg-slate-50 dark:bg-slate-900/20 border border-slate-100 dark:border-slate-800 rounded text-[10px] space-y-0.5">
+                          <div className="flex justify-between items-center">
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">{formatBangkokTime(c.requested_scheduled_at)}</span>
+                            <span className={`font-bold px-1 rounded-[3px] text-[8px] ${
+                              c.status === "APPROVED" ? "bg-green-100 text-green-800" :
+                              c.status === "REJECTED" ? "bg-red-100 text-red-800" : "bg-slate-100 text-slate-800"
+                            }`}>{c.status}</span>
+                          </div>
+                          <div className="text-slate-500">{language === "en" ? "Reason" : "เหตุผล"}: {c.reason}</div>
+                          {c.review_remark && <div className="text-[#D4AF37] italic">{language === "en" ? "Remark" : "หมายเหตุ"}: {c.review_remark}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Photos Section */}

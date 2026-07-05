@@ -100,6 +100,21 @@ interface WorkOrderDbRow {
     uploaded_by: string | null;
     created_at: string;
   }> | null;
+  work_order_schedule_changes?: Array<{
+    id: string;
+    work_order_id: string;
+    old_scheduled_at: string | null;
+    requested_scheduled_at: string;
+    reason: string;
+    status: string;
+    requested_by: string | null;
+    requested_at: string;
+    reviewed_by: string | null;
+    reviewed_at: string | null;
+    review_remark: string | null;
+    created_at: string;
+    updated_at: string;
+  }> | null;
 }
 
 function mapToWorkOrder(row: WorkOrderDbRow): WorkOrder {
@@ -211,6 +226,24 @@ function mapToWorkOrder(row: WorkOrderDbRow): WorkOrder {
           created_at: p.created_at,
         }))
       : [],
+
+    schedule_changes: row.work_order_schedule_changes
+      ? row.work_order_schedule_changes.map((sc) => ({
+          id: sc.id,
+          work_order_id: sc.work_order_id,
+          old_scheduled_at: sc.old_scheduled_at,
+          requested_scheduled_at: sc.requested_scheduled_at,
+          reason: sc.reason,
+          status: sc.status as "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED",
+          requested_by: sc.requested_by,
+          requested_at: sc.requested_at,
+          reviewed_by: sc.reviewed_by,
+          reviewed_at: sc.reviewed_at,
+          review_remark: sc.review_remark,
+          created_at: sc.created_at,
+          updated_at: sc.updated_at,
+        }))
+      : [],
   };
 }
 
@@ -223,7 +256,8 @@ const SELECT_QUERY = `
     persons:person_id (*)
   ),
   assignees:assigned_to (id, full_name, display_name, email, phone),
-  work_order_photos (*)
+  work_order_photos (*),
+  work_order_schedule_changes (*)
 `;
 
 export async function findAll(): Promise<WorkOrder[]> {

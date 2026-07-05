@@ -67,6 +67,23 @@ export interface WorkOrder {
     phone: string | null;
   } | null;
   photos?: WorkOrderPhoto[] | null;
+  schedule_changes?: WorkOrderScheduleChange[] | null;
+}
+
+export interface WorkOrderScheduleChange {
+  id: string;
+  work_order_id: string;
+  old_scheduled_at: string | null;
+  requested_scheduled_at: string;
+  reason: string;
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+  requested_by: string | null;
+  requested_at: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_remark: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface CreateWorkOrderDto {
@@ -105,4 +122,35 @@ export interface UpdateWorkOrderDto {
   worker_remark?: string | null;
   charge_amount?: number | null;
   actual_cost?: number | null;
+}
+
+export type AttentionStatus =
+  | "PENDING_RESCHEDULE_APPROVAL"
+  | "RESCHEDULE_REJECTED"
+  | "RESCHEDULE_APPROVED"
+  | "NORMAL"
+  | "CANCELLED";
+
+export function deriveAttentionStatus(order: WorkOrder): AttentionStatus {
+  if (order.schedule_changes && order.schedule_changes.length > 0) {
+    const sorted = [...order.schedule_changes].sort(
+      (a, b) => new Date(b.requested_at).getTime() - new Date(a.requested_at).getTime()
+    );
+
+    const hasPending = sorted.some((sc) => sc.status === "PENDING");
+    if (hasPending) {
+      return "PENDING_RESCHEDULE_APPROVAL";
+    }
+
+    const latest = sorted[0];
+    if (latest.status === "APPROVED") {
+      return "RESCHEDULE_APPROVED";
+    } else if (latest.status === "REJECTED") {
+      return "RESCHEDULE_REJECTED";
+    } else if (latest.status === "CANCELLED") {
+      return "CANCELLED";
+    }
+  }
+
+  return "NORMAL";
 }

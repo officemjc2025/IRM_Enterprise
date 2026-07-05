@@ -3,7 +3,7 @@
 import React, { useEffect, useState, Suspense } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useLanguage } from "@/providers/LanguageProvider";
-import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderPhoto } from "@/features/work-order/types/work-order.types";
+import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderPhoto, AttentionStatus, deriveAttentionStatus } from "@/features/work-order/types/work-order.types";
 import { PageHeader, SearchInput, EmptyState, LoadingState } from "@/shared/ui";
 import { createClient } from "@/lib/supabase/client";
 import { User } from "@supabase/supabase-js";
@@ -51,6 +51,7 @@ function WorkOrderDashboardInner() {
   const [propertyFilter, setPropertyFilter] = useState<string>("ALL");
   const [techFilter, setTechFilter] = useState<string>("ALL");
   const [teamFilter, setTeamFilter] = useState<string>("ALL");
+  const [attentionFilter, setAttentionFilter] = useState<string>("ALL");
 
   // Tab View
   const [activeTab, setActiveTab] = useState<"ACTIVE" | "HISTORY">("ACTIVE");
@@ -538,7 +539,7 @@ function WorkOrderDashboardInner() {
         </div>
 
         {/* Advanced Filters Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2 border-t border-slate-50 dark:border-slate-700/50">
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 pt-2 border-t border-slate-50 dark:border-slate-700/50">
 
           {/* Status filter */}
           <div className="flex flex-col gap-1">
@@ -626,6 +627,22 @@ function WorkOrderDashboardInner() {
               ))}
             </select>
           </div>
+
+          {/* Attention status filter */}
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{language === "en" ? "Action Required" : "สถานะที่ต้องดำเนินการ"}</span>
+            <select
+              value={attentionFilter}
+              onChange={(e) => setAttentionFilter(e.target.value)}
+              className="p-1.5 border border-slate-200 dark:border-slate-700 rounded dark:bg-slate-900 text-xs font-semibold outline-none"
+            >
+              <option value="ALL">{language === "en" ? "ALL ATTENTION" : "ทั้งหมด"}</option>
+              <option value="ACTION_REQUIRED">{language === "en" ? "ACTION REQUIRED" : "ต้องดำเนินการ"}</option>
+              <option value="PENDING_RESCHEDULE">{language === "en" ? "PENDING RESCHEDULE" : "รออนุมัติเลื่อนนัด"}</option>
+              <option value="NORMAL">{language === "en" ? "NORMAL" : "ปกติ"}</option>
+            </select>
+          </div>
+
         </div>
       </div>
 
@@ -649,6 +666,7 @@ function WorkOrderDashboardInner() {
                   <th className="p-4">{language === "en" ? "Property & Room" : "ห้องชุด / โครงการ"}</th>
                   <th className="p-4">{language === "en" ? "Priority" : "ความสำคัญ"}</th>
                   <th className="p-4">{language === "en" ? "Status" : "สถานะ"}</th>
+                  <th className="p-4">{language === "en" ? "Attention" : "สถานะดำเนินการ"}</th>
                   <th className="p-4">{language === "en" ? "Technician" : "ผู้ดำเนินงาน"}</th>
                   <th className="p-4 text-right">{language === "en" ? "Actions" : "การควบคุม"}</th>
                 </tr>
@@ -707,6 +725,31 @@ function WorkOrderDashboardInner() {
                             : "bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-500"
                         }`}>
                           {wo.status}
+                        </span>
+                      </td>
+                      <td className="p-4">
+                        <span className={`px-1.5 py-0.5 rounded font-bold text-[9px] ${
+                          (() => {
+                            const attStatus = deriveAttentionStatus(wo);
+                            return attStatus === "PENDING_RESCHEDULE_APPROVAL"
+                              ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-400 border border-yellow-300 animate-pulse font-bold"
+                              : attStatus === "RESCHEDULE_REJECTED"
+                              ? "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400"
+                              : attStatus === "RESCHEDULE_APPROVED"
+                              ? "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-400"
+                              : attStatus === "CANCELLED"
+                              ? "bg-slate-100 text-slate-500 dark:bg-slate-900"
+                              : "bg-slate-50 text-slate-400 dark:bg-slate-900";
+                          })()
+                        }`}>
+                          {(() => {
+                            const attStatus = deriveAttentionStatus(wo);
+                            return attStatus === "PENDING_RESCHEDULE_APPROVAL" ? (language === "en" ? "PENDING RESCHEDULE" : "รออนุมัติเลื่อนนัด") :
+                              attStatus === "RESCHEDULE_REJECTED" ? (language === "en" ? "REJECTED" : "คำขอเลื่อนถูกปฏิเสธ") :
+                              attStatus === "RESCHEDULE_APPROVED" ? (language === "en" ? "APPROVED" : "อนุมัติเลื่อนนัดแล้ว") :
+                              attStatus === "CANCELLED" ? (language === "en" ? "CANCELLED" : "ยกเลิกคำขอ") :
+                              (language === "en" ? "NORMAL" : "ปกติ");
+                          })()}
                         </span>
                       </td>
                       <td className="p-4 font-semibold text-slate-700 dark:text-slate-300">
