@@ -174,15 +174,18 @@ export const translateAttention = (val: string, locale: "th" | "en") => {
       case "EXTENSION_PENDING": return "รออนุมัติขยายระยะเวลา";
       case "UPCOMING_CHECKOUT": return "สิ้นสุดสัญญาสัปดาห์นี้";
       case "CHECKOUT_OVERDUE": return "เลยวันย้ายออก";
+      case "ACTION_REQUIRED": return "ต้องดำเนินการ";
       case "NORMAL": return "ปกติ";
-      // Reservation attentions
+       // Reservation attentions
       case "PENDING_CONFIRMATION": return "รอยืนยันใบจอง";
       case "UPCOMING_CHECK_IN": return "เช็คอินเร็วๆ นี้";
       case "CURRENTLY_IN_HOUSE": return "อยู่ในห้องพัก";
       case "CANCELLED": return "ยกเลิกแล้ว";
       case "NO_SHOW": return "ไม่แสดงตัว";
+      case "PREP_REQUIRED": return "รอเตรียมห้องพัก";
       default: return val;
     }
   }
-  return val.replace("_", " ");
+  if (val === "ACTION_REQUIRED") return "Action Required";
+  return val === "PREP_REQUIRED" ? "Prep Required" : val.replace("_", " ");
 };

@@ -76,9 +76,12 @@ export async function PATCH(request: Request, { params }: Params) {
     const disc = updateData.discount_amount !== undefined ? updateData.discount_amount : currentPeriod.discount_amount;
     const paid = updateData.paid_amount !== undefined ? updateData.paid_amount : currentPeriod.paid_amount;
 
-    const expected = rent + water + electricity + other - disc;
+    const expected = Math.max(0, rent + water + electricity + other - disc);
+    if (paid > expected) {
+      return NextResponse.json({ success: false, message: "Payment amount cannot exceed expected total amount" }, { status: 400 });
+    }
     updateData.expected_total = expected;
-    updateData.outstanding_amount = Math.max(0, expected - paid);
+    updateData.outstanding_amount = expected - paid;
 
     const { data: updated, error: updateErr } = await supabase
       .from("stay_charge_periods")

@@ -33,7 +33,8 @@ export async function GET(request: Request, { params }: Params) {
         property:property_id (id, property_name_th, property_name_en),
         unit:unit_id (id, unit_number),
         primary_guest:primary_guest_person_id (id, first_name, last_name, display_name),
-        work_orders:work_orders (*)
+        work_orders:work_orders (*),
+        stay_charge_periods:stay_charge_periods (*)
       `)
       .eq("id", resId)
       .single();
@@ -96,6 +97,15 @@ export async function PATCH(request: Request, { params }: Params) {
     }
 
     const body = await request.json();
+    
+    // Explicitly reject mixed lifecycle + unrelated edit payloads
+    if (body.status === "CHECKED_IN" || body.status === "CHECKED_OUT") {
+      const otherKeys = Object.keys(body).filter(k => k !== "status");
+      if (otherKeys.length > 0) {
+        return NextResponse.json({ success: false, message: "Cannot mix lifecycle status change with other edit fields" }, { status: 400 });
+      }
+    }
+
     const updateData: Record<string, unknown> = {};
 
     // Map editable fields
@@ -120,24 +130,43 @@ export async function PATCH(request: Request, { params }: Params) {
 
     // Status transition & audit fields
     if (body.status !== undefined) {
-      updateData.status = body.status;
       const nowStr = new Date().toISOString();
-      if (body.status === "CONFIRMED") {
-        updateData.confirmed_by = user.id;
-        updateData.confirmed_at = nowStr;
-      } else if (body.status === "CANCELLED") {
-        if (currentRes.status === "CHECKED_IN") {
-          return NextResponse.json({ success: false, message: "Cannot cancel an active stay; please perform check-out instead" }, { status: 400 });
+      const currentStatus = currentRes.status;
+
+      if (body.status !== currentStatus) {
+        if (body.status === "CONFIRMED") {
+          if (!["DRAFT", "PENDING_CONFIRMATION"].includes(currentStatus)) {
+            return NextResponse.json({ success: false, message: `Cannot transition status from ${currentStatus} to CONFIRMED` }, { status: 400 });
+          }
+          updateData.confirmed_by = user.id;
+          updateData.confirmed_at = nowStr;
+        } else if (body.status === "CANCELLED") {
+          if (!["DRAFT", "PENDING_CONFIRMATION", "CONFIRMED"].includes(currentStatus)) {
+            return NextResponse.json({ success: false, message: "Only draft, pending confirmation, or confirmed reservations can be cancelled" }, { status: 400 });
+          }
+          updateData.cancelled_by = user.id;
+          updateData.cancelled_at = nowStr;
+          updateData.cancellation_reason = body.cancellation_reason || "Cancelled by admin";
+        } else if (body.status === "CHECKED_IN") {
+          if (currentStatus !== "CONFIRMED") {
+            return NextResponse.json({ success: false, message: "Only confirmed reservations can be checked in" }, { status: 400 });
+          }
+          updateData.checked_in_by = user.id;
+          updateData.actual_check_in_at = nowStr;
+        } else if (body.status === "CHECKED_OUT") {
+          if (currentStatus !== "CHECKED_IN") {
+            return NextResponse.json({ success: false, message: "Only active checked-in stays can be checked out" }, { status: 400 });
+          }
+          updateData.checked_out_by = user.id;
+          updateData.actual_check_out_at = nowStr;
+        } else if (body.status === "PENDING_CONFIRMATION") {
+          if (currentStatus !== "DRAFT") {
+            return NextResponse.json({ success: false, message: "Only draft reservations can be submitted for confirmation" }, { status: 400 });
+          }
+        } else {
+          return NextResponse.json({ success: false, message: `Invalid target status transition: ${body.status}` }, { status: 400 });
         }
-        updateData.cancelled_by = user.id;
-        updateData.cancelled_at = nowStr;
-        updateData.cancellation_reason = body.cancellation_reason || "Cancelled by admin";
-      } else if (body.status === "CHECKED_IN") {
-        updateData.checked_in_by = user.id;
-        updateData.actual_check_in_at = nowStr;
-      } else if (body.status === "CHECKED_OUT") {
-        updateData.checked_out_by = user.id;
-        updateData.actual_check_out_at = nowStr;
+        updateData.status = body.status;
       }
     }
 
@@ -185,6 +214,58 @@ export async function PATCH(request: Request, { params }: Params) {
       }
     }
 
+    if (body.status === "CHECKED_IN") {
+      const { error: rpcErr } = await supabase.rpc("check_in_reservation", {
+        p_reservation_id: resId
+      });
+      if (rpcErr) {
+        const { status, message } = mapRpcError(rpcErr);
+        return NextResponse.json({ success: false, message }, { status });
+      }
+
+      const { data: updated, error: fetchErr } = await supabase
+        .from("reservations")
+        .select(`
+          *,
+          property:property_id (id, property_name_th, property_name_en),
+          unit:unit_id (id, unit_number),
+          primary_guest:primary_guest_person_id (id, first_name, last_name, display_name),
+          work_orders:work_orders (*),
+          stay_charge_periods:stay_charge_periods (*)
+        `)
+        .eq("id", resId)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      return NextResponse.json({ success: true, data: updated });
+    }
+
+    if (body.status === "CHECKED_OUT") {
+      const { error: rpcErr } = await supabase.rpc("check_out_reservation", {
+        p_reservation_id: resId
+      });
+      if (rpcErr) {
+        const { status, message } = mapRpcError(rpcErr);
+        return NextResponse.json({ success: false, message }, { status });
+      }
+
+      const { data: updated, error: fetchErr } = await supabase
+        .from("reservations")
+        .select(`
+          *,
+          property:property_id (id, property_name_th, property_name_en),
+          unit:unit_id (id, unit_number),
+          primary_guest:primary_guest_person_id (id, first_name, last_name, display_name),
+          work_orders:work_orders (*),
+          stay_charge_periods:stay_charge_periods (*)
+        `)
+        .eq("id", resId)
+        .single();
+      if (fetchErr) throw fetchErr;
+
+      return NextResponse.json({ success: true, data: updated });
+    }
+
     const { data: updated, error: updateErr } = await supabase
       .from("reservations")
       .update(updateData)
@@ -194,7 +275,8 @@ export async function PATCH(request: Request, { params }: Params) {
         property:property_id (id, property_name_th, property_name_en),
         unit:unit_id (id, unit_number),
         primary_guest:primary_guest_person_id (id, first_name, last_name, display_name),
-        work_orders:work_orders (*)
+        work_orders:work_orders (*),
+        stay_charge_periods:stay_charge_periods (*)
       `)
       .single();
 
@@ -313,4 +395,26 @@ export async function DELETE(request: Request, { params }: Params) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
+}
+
+function mapRpcError(err: { message: string }) {
+  const msg = err.message || "";
+  
+  if (msg.includes("Unauthenticated")) {
+    return { status: 401, message: "Authentication required" };
+  }
+  if (msg.includes("Forbidden") || msg.includes("cross-property")) {
+    return { status: 403, message: "Forbidden: You are not authorized to perform this action" };
+  }
+  if (msg.includes("Reservation not found")) {
+    return { status: 404, message: "Reservation not found" };
+  }
+  if (msg.includes("Occupancy conflict")) {
+    return { status: 409, message: "Occupancy conflict: Another reservation is already checked-in for this unit during this period" };
+  }
+  if (msg.includes("Only confirmed reservations") || msg.includes("Only active checked-in stays")) {
+    return { status: 409, message: msg };
+  }
+  
+  return { status: 400, message: "Transaction failed: validation error" };
 }

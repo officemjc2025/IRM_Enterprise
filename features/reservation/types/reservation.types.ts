@@ -20,6 +20,7 @@ export type ReservationAttentionStatus =
   | "UPCOMING_CHECK_OUT"
   | "CANCELLED"
   | "NO_SHOW"
+  | "PREP_REQUIRED"
   | "NORMAL";
 
 export type PricingMethod = "HALF_MONTH" | "DAILY_PRORATE" | "FULL_MONTH" | "CUSTOM";
@@ -123,6 +124,16 @@ export function deriveReservationAttention(res: Reservation): ReservationAttenti
   const checkIn = new Date(res.check_in_at);
 
   if (res.status === "CONFIRMED") {
+    const hasPrepOrder = res.work_orders && res.work_orders.some(wo => 
+      (wo.category === "PRE_ARRIVAL" || 
+       wo.category === "Cleaning" || 
+       wo.title?.toLowerCase().includes("prep") || 
+       wo.title?.toLowerCase().includes("เตรียม")) && 
+      wo.status !== "CANCELLED"
+    );
+    if (!hasPrepOrder) {
+      return "PREP_REQUIRED";
+    }
     const diffTime = checkIn.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     if (diffDays <= 3 && diffDays >= -1) {

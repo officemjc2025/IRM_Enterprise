@@ -17,13 +17,30 @@ export async function GET(request: Request, { params }: Params) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, property_id")
       .eq("id", user.id)
       .single();
 
     const isAdmin = profile && ["admin", "super_admin", "property_admin"].includes(profile.role);
     if (!isAdmin) {
       return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
+    }
+
+    const { data: reservation } = await supabase
+      .from("reservations")
+      .select("property_id")
+      .eq("id", resId)
+      .single();
+
+    if (!reservation) {
+      return NextResponse.json({ success: false, message: "Reservation not found" }, { status: 404 });
+    }
+
+    // Property Admin Scope Enforcer
+    if (profile.role === "property_admin") {
+      if (!profile.property_id || reservation.property_id !== profile.property_id) {
+        return NextResponse.json({ success: false, message: "Forbidden: cross-property access denied" }, { status: 403 });
+      }
     }
 
     const { data: periods, error } = await supabase
@@ -83,27 +100,37 @@ export async function POST(request: Request, { params }: Params) {
     const start = new Date(reservation.check_in_at);
     const end = new Date(reservation.check_out_at);
 
-    // Generate monthly periods
+    // Generate monthly periods aligned with migration 029
     const periodsToInsert: Record<string, unknown>[] = [];
-    let currentStart = new Date(start.getFullYear(), start.getMonth(), 1);
+    let currentStart = new Date(start);
+    let isFirstPeriod = true;
 
     while (currentStart < end) {
       const nextMonth = new Date(currentStart.getFullYear(), currentStart.getMonth() + 1, 1);
-      const periodEnd = new Date(nextMonth.getTime() - 24 * 60 * 60 * 1000); // end of current month
+      const endOfMonth = new Date(nextMonth.getTime() - 24 * 60 * 60 * 1000);
+      const periodEnd = endOfMonth < end ? endOfMonth : new Date(end);
 
-      // Format ISO Dates
       const startStr = currentStart.toISOString().split("T")[0];
       const endStr = periodEnd.toISOString().split("T")[0];
-      const dueStr = new Date(currentStart.getFullYear(), currentStart.getMonth(), 5).toISOString().split("T")[0];
 
-      // Calculate rent proration if partial month (e.g. check-out happens before end of month)
+      const dueStart = new Date(currentStart.getFullYear(), currentStart.getMonth(), 5);
+      const dueStr = (dueStart < periodEnd ? dueStart : periodEnd).toISOString().split("T")[0];
+
       let rent = reservation.monthly_rate || 0;
       if (reservation.billing_basis === "DAILY") {
-        const daysInPeriod = Math.max(1, Math.ceil((periodEnd.getTime() - currentStart.getTime()) / (1000 * 60 * 60 * 24)));
+        let daysInPeriod = 0;
+        if (periodEnd.getTime() === end.getTime()) {
+          daysInPeriod = Math.max(0, Math.ceil((end.getTime() - currentStart.getTime()) / (1000 * 60 * 60 * 24)));
+        } else {
+          daysInPeriod = Math.max(0, Math.ceil((nextMonth.getTime() - currentStart.getTime()) / (1000 * 60 * 60 * 24)));
+        }
         rent = (reservation.daily_rate || 0) * daysInPeriod;
       }
 
-      const expectedTotal = rent - (reservation.discount_amount || 0);
+      const discount = isFirstPeriod ? (reservation.discount_amount || 0) : 0;
+      isFirstPeriod = false;
+
+      const expectedTotal = Math.max(0, rent - discount);
 
       periodsToInsert.push({
         reservation_id: resId,
@@ -113,10 +140,10 @@ export async function POST(request: Request, { params }: Params) {
         period_end: endStr,
         due_date: dueStr,
         rent_amount: rent,
-        discount_amount: reservation.discount_amount || 0.00,
+        discount_amount: discount,
         expected_total: expectedTotal,
         outstanding_amount: expectedTotal,
-        overall_status: "NOT_READY" // utility completeness is pending
+        overall_status: "NOT_READY"
       });
 
       currentStart = nextMonth;

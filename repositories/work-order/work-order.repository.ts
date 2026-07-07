@@ -17,6 +17,7 @@ interface WorkOrderDbRow {
   property_id: string;
   unit_id: string;
   resident_assignment_id: string | null;
+  reservation_id: string | null;
   category: string;
   title: string;
   description: string | null;
@@ -158,6 +159,7 @@ function mapToWorkOrder(row: WorkOrderDbRow): WorkOrder {
     property_id: row.property_id,
     unit_id: row.unit_id,
     resident_assignment_id: row.resident_assignment_id,
+    reservation_id: row.reservation_id,
     category: row.category,
     title: row.title,
     description: row.description,
@@ -363,6 +365,7 @@ export async function create(dto: CreateWorkOrderDto): Promise<WorkOrder> {
     property_id: dto.property_id,
     unit_id: dto.unit_id,
     resident_assignment_id: dto.resident_assignment_id || null,
+    reservation_id: dto.reservation_id || null,
     category: dto.category,
     title: dto.title,
     description: dto.description || null,

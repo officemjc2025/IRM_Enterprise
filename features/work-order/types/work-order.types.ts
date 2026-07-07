@@ -28,6 +28,7 @@ export interface WorkOrder {
   property_id: string;
   unit_id: string;
   resident_assignment_id: string | null;
+  reservation_id?: string | null;
   category: string;
   title: string;
   description: string | null;
@@ -93,6 +94,7 @@ export interface CreateWorkOrderDto {
   property_id: string;
   unit_id: string;
   resident_assignment_id?: string | null;
+  reservation_id?: string | null;
   category: string;
   title: string;
   description?: string | null;
@@ -108,6 +110,7 @@ export interface UpdateWorkOrderDto {
   category?: string;
   title?: string;
   description?: string | null;
+  reservation_id?: string | null;
   priority?: WorkOrderPriority;
   status?: WorkOrderStatus;
   service_team?: "TECHNICIAN" | "HOUSEKEEPING";

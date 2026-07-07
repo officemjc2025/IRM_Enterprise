@@ -60,7 +60,7 @@ function ReservationsContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [allReservations, setAllReservations] = useState<Reservation[]>([]);
 
   // Filter States
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
@@ -70,6 +70,7 @@ function ReservationsContent() {
   const [searchQuery, setSearchQuery] = useState("");
   const [startDateStr, setStartDateStr] = useState("");
   const [endDateStr, setEndDateStr] = useState("");
+
 
   // Metadata Options
   const [properties, setProperties] = useState<PropertyOption[]>([]);
@@ -205,7 +206,7 @@ function ReservationsContent() {
     if (!isAdmin) return;
     try {
       setLoading(true);
-      let url = `/api/v1/reservations?property_id=${propertyFilter}&reservation_type=${typeFilter}&status=${statusFilter}`;
+      let url = `/api/v1/reservations?property_id=${propertyFilter}`;
       if (startDateStr) url += `&start=${new Date(startDateStr).toISOString()}`;
       if (endDateStr) url += `&end=${new Date(endDateStr).toISOString()}`;
       if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
@@ -213,18 +214,14 @@ function ReservationsContent() {
       const res = await fetch(url);
       const json = await res.json();
       if (json.success) {
-        let list: Reservation[] = json.data || [];
-        if (attentionFilter !== "ALL") {
-          list = list.filter((r) => deriveReservationAttention(r) === attentionFilter);
-        }
-        setReservations(list);
+        setAllReservations(json.data || []);
       }
     } catch (err) {
       console.error(err);
     } finally {
       setLoading(false);
     }
-  }, [isAdmin, propertyFilter, typeFilter, statusFilter, startDateStr, endDateStr, searchQuery, attentionFilter]);
+  }, [isAdmin, propertyFilter, startDateStr, endDateStr, searchQuery]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -234,6 +231,73 @@ function ReservationsContent() {
       return () => clearTimeout(timer);
     }
   }, [isAdmin, fetchReservationsList]);
+
+  const reservations = React.useMemo(() => {
+    let filtered = allReservations;
+    if (typeFilter !== "ALL") {
+      filtered = filtered.filter((r) => r.reservation_type === typeFilter);
+    }
+    if (statusFilter !== "ALL") {
+      filtered = filtered.filter((r) => r.status === statusFilter);
+    }
+    if (attentionFilter !== "ALL") {
+      filtered = filtered.filter((r) => deriveReservationAttention(r) === attentionFilter);
+    }
+    return filtered;
+  }, [allReservations, typeFilter, statusFilter, attentionFilter]);
+
+  const stats = React.useMemo(() => {
+    const todayStr = new Date().toLocaleDateString("en-US", { timeZone: "Asia/Bangkok" });
+    const todayDate = new Date(todayStr);
+    const todayStart = new Date(todayDate.getFullYear(), todayDate.getMonth(), todayDate.getDate()).getTime();
+    const todayEnd = todayStart + 24 * 60 * 60 * 1000;
+
+    let pendingConfirmation = 0;
+    let confirmed = 0;
+    let checkInToday = 0;
+    let checkedIn = 0;
+    let upcomingCheckout = 0;
+    let actionRequired = 0;
+    let cancelled = 0;
+
+    allReservations.forEach((r) => {
+      const attention = deriveReservationAttention(r);
+      if (r.status === "PENDING_CONFIRMATION") pendingConfirmation++;
+      if (r.status === "CONFIRMED") confirmed++;
+      if (r.status === "CHECKED_IN") checkedIn++;
+      if (r.status === "CANCELLED") cancelled++;
+
+      if (r.status === "CONFIRMED") {
+        const checkInTime = new Date(r.check_in_at).getTime();
+        if (checkInTime >= todayStart && checkInTime < todayEnd) {
+          checkInToday++;
+        }
+      }
+
+      if (r.status === "CHECKED_IN") {
+        const checkoutTime = new Date(r.check_out_at).getTime();
+        const diffTime = checkoutTime - new Date().getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (diffDays <= 3 && diffDays >= 0) {
+          upcomingCheckout++;
+        }
+      }
+
+      if (["PREP_REQUIRED", "NO_SHOW", "PENDING_CONFIRMATION"].includes(attention)) {
+        actionRequired++;
+      }
+    });
+
+    return {
+      pendingConfirmation,
+      confirmed,
+      checkInToday,
+      checkedIn,
+      upcomingCheckout,
+      actionRequired,
+      cancelled,
+    };
+  }, [allReservations]);
 
   useEffect(() => {
     if (!newUnitId || !newCheckInDate || !newCheckOutDate) {
@@ -423,6 +487,50 @@ function ReservationsContent() {
   };
 
   const handleUpdateStatus = async (resId: string, nextStatus: ReservationStatus) => {
+    if (nextStatus === "CHECKED_OUT" && selectedRes) {
+      const periods = selectedRes.stay_charge_periods || [];
+      const unpaidPeriods = periods.filter((p) => p.rent_status !== "PAID" && p.rent_status !== "WAIVED");
+      const outstandingBalance = periods.reduce((sum, p) => sum + (p.outstanding_amount || 0), 0);
+      const pendingUtilities = periods.filter((p) => p.water_status === "PENDING" || p.electricity_status === "PENDING");
+      
+      const hasUnresolvedExt = selectedExtensions.some(ext => ext.status === "PENDING_APPROVAL");
+
+      if (unpaidPeriods.length > 0 || outstandingBalance > 0 || pendingUtilities.length > 0 || hasUnresolvedExt) {
+        let msg = language === "en" 
+          ? "⚠️ Operational Warning before Checkout:\n\n"
+          : "⚠️ คำเตือนการปฏิบัติงานก่อนเช็คเอาต์:\n\n";
+
+        if (outstandingBalance > 0) {
+          msg += language === "en"
+            ? `- Outstanding Balance: ${outstandingBalance} THB\n`
+            : `- ยอดค้างชำระทั้งหมด: ${outstandingBalance} บาท\n`;
+        }
+        if (unpaidPeriods.length > 0) {
+          msg += language === "en"
+            ? `- Unpaid Periods: ${unpaidPeriods.length} periods\n`
+            : `- รอบบิลที่ยังไม่ชำระ: ${unpaidPeriods.length} รอบบิล\n`;
+        }
+        if (pendingUtilities.length > 0) {
+          msg += language === "en"
+            ? `- Incomplete Utilities: ${pendingUtilities.length} billing periods are missing water/electricity meters\n`
+            : `- รายการค่าน้ำ/ค่าไฟค้างบันทึก: ${pendingUtilities.length} รอบบิล\n`;
+        }
+        if (hasUnresolvedExt) {
+          msg += language === "en"
+            ? "- Pending Extension Requests: There are extension requests awaiting approval\n"
+            : "- คำขอต่อสัญญาค้างดำเนินการ: มีรายการขยายเวลาพักที่รออนุมัติอยู่\n";
+        }
+
+        msg += language === "en"
+          ? "\nAre you sure you want to proceed with checking out this guest?"
+          : "\nคุณแน่ใจหรือไม่ว่าต้องการดำเนินการเช็คเอาต์ผู้เข้าพักรายนี้?";
+
+        if (!confirm(msg)) {
+          return;
+        }
+      }
+    }
+
     try {
       const res = await fetch(`/api/v1/reservations/${resId}`, {
         method: "PATCH",
@@ -656,6 +764,109 @@ function ReservationsContent() {
         </button>
       </div>
 
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div
+          onClick={() => {
+            setStatusFilter(statusFilter === "PENDING_CONFIRMATION" ? "ALL" : "PENDING_CONFIRMATION");
+            setAttentionFilter("ALL");
+          }}
+          className={`p-3 rounded-xl border cursor-pointer transition shadow-sm ${
+            statusFilter === "PENDING_CONFIRMATION"
+              ? "bg-[#D4AF37]/15 border-[#D4AF37]"
+              : "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-[#D4AF37]/50"
+          }`}
+        >
+          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-450 uppercase block">{language === "en" ? "Pending Conf." : "รอยืนยัน"}</span>
+          <span className="text-xl font-bold text-slate-700 dark:text-slate-200 block mt-1">{stats.pendingConfirmation}</span>
+        </div>
+
+        <div
+          onClick={() => {
+            setStatusFilter(statusFilter === "CONFIRMED" ? "ALL" : "CONFIRMED");
+            setAttentionFilter("ALL");
+          }}
+          className={`p-3 rounded-xl border cursor-pointer transition shadow-sm ${
+            statusFilter === "CONFIRMED"
+              ? "bg-green-500/15 border-green-500"
+              : "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-green-500/50"
+          }`}
+        >
+          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-450 uppercase block">{language === "en" ? "Confirmed" : "ยืนยันแล้ว"}</span>
+          <span className="text-xl font-bold text-green-600 dark:text-green-400 block mt-1">{stats.confirmed}</span>
+        </div>
+
+        <div
+          onClick={() => {
+            setStatusFilter("CONFIRMED");
+            setAttentionFilter("ALL");
+            const todayStr = new Date().toLocaleDateString("en-CA");
+            setStartDateStr(todayStr);
+            setEndDateStr(todayStr);
+          }}
+          className="p-3 rounded-xl border cursor-pointer bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-blue-500/50 transition shadow-sm"
+        >
+          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-450 uppercase block">{language === "en" ? "Check-in Today" : "เข้าพักวันนี้"}</span>
+          <span className="text-xl font-bold text-blue-600 dark:text-blue-400 block mt-1">{stats.checkInToday}</span>
+        </div>
+
+        <div
+          onClick={() => {
+            setStatusFilter(statusFilter === "CHECKED_IN" ? "ALL" : "CHECKED_IN");
+            setAttentionFilter("ALL");
+          }}
+          className={`p-3 rounded-xl border cursor-pointer transition shadow-sm ${
+            statusFilter === "CHECKED_IN"
+              ? "bg-indigo-500/15 border-indigo-500"
+              : "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-indigo-500/50"
+          }`}
+        >
+          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-450 uppercase block">{language === "en" ? "In House" : "กำลังเข้าพัก"}</span>
+          <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400 block mt-1">{stats.checkedIn}</span>
+        </div>
+
+        <div
+          onClick={() => {
+            setStatusFilter("CHECKED_IN");
+            setAttentionFilter("ALL");
+          }}
+          className="p-3 rounded-xl border cursor-pointer bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-amber-500/50 transition shadow-sm"
+        >
+          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-450 uppercase block">{language === "en" ? "Expiring Stays" : "ใกล้ครบกำหนด"}</span>
+          <span className="text-xl font-bold text-amber-600 dark:text-amber-400 block mt-1">{stats.upcomingCheckout}</span>
+        </div>
+
+        <div
+          onClick={() => {
+            setAttentionFilter(attentionFilter === "PREP_REQUIRED" ? "ALL" : "PREP_REQUIRED");
+            setStatusFilter("ALL");
+          }}
+          className={`p-3 rounded-xl border cursor-pointer transition shadow-sm ${
+            attentionFilter === "PREP_REQUIRED"
+              ? "bg-red-500/15 border-red-500"
+              : "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-red-500/50"
+          }`}
+        >
+          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-450 uppercase block">{language === "en" ? "Action Required" : "ต้องดำเนินการ"}</span>
+          <span className="text-xl font-bold text-red-600 dark:text-red-400 block mt-1">{stats.actionRequired}</span>
+        </div>
+
+        <div
+          onClick={() => {
+            setStatusFilter(statusFilter === "CANCELLED" ? "ALL" : "CANCELLED");
+            setAttentionFilter("ALL");
+          }}
+          className={`p-3 rounded-xl border cursor-pointer transition shadow-sm ${
+            statusFilter === "CANCELLED"
+              ? "bg-slate-500/15 border-slate-500"
+              : "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 hover:border-slate-500/50"
+          }`}
+        >
+          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-450 uppercase block">{language === "en" ? "Cancelled" : "ยกเลิก"}</span>
+          <span className="text-xl font-bold text-slate-600 dark:text-slate-400 block mt-1">{stats.cancelled}</span>
+        </div>
+      </div>
+
       <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-4 shadow-sm space-y-4">
         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
           <div className="flex flex-wrap gap-3 items-center">
@@ -722,6 +933,7 @@ function ReservationsContent() {
                 <option value="CURRENTLY_IN_HOUSE">{translateAttention("CURRENTLY_IN_HOUSE", language)}</option>
                 <option value="CANCELLED">{translateAttention("CANCELLED", language)}</option>
                 <option value="NO_SHOW">{translateAttention("NO_SHOW", language)}</option>
+                <option value="PREP_REQUIRED">{translateAttention("PREP_REQUIRED", language)}</option>
               </select>
             </div>
           </div>
@@ -822,6 +1034,8 @@ function ReservationsContent() {
                             ? "bg-blue-100 text-blue-800 border border-blue-200"
                             : attention === "CURRENTLY_IN_HOUSE"
                             ? "bg-green-100 text-green-800"
+                            : attention === "PREP_REQUIRED"
+                            ? "bg-red-100 text-red-800 border border-red-205"
                             : attention === "CANCELLED"
                             ? "bg-slate-100 text-slate-400"
                             : "bg-slate-50 text-slate-400"
@@ -1433,42 +1647,49 @@ function ReservationsContent() {
                 ➕ {language === "en" ? "Create Work Order from Reservation" : "ออกใบงานปฏิบัติการจากการจองห้องพัก"}
               </span>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setDispatchTitle("Pre-Arrival Room Preparation");
-                    setDispatchDesc("Perform full turnover check and clean up unit prior to guest check-in.");
+                    setDispatchTitle(language === "en" ? "Pre-Arrival Room Preparation" : "เตรียมห้องพักก่อนเข้าพัก");
+                    setDispatchDesc(language === "en" ? "Perform full turnover check and clean up unit prior to guest check-in." : "ตรวจเช็คห้องพักทำความสะอาดและจัดเตรียมสิ่งอำนวยความสะดวกก่อนผู้เช่าเช็คอินเข้าอยู่");
                     setDispatchCategory("Cleaning");
                     setDispatchTeam("HOUSEKEEPING");
+                    if (selectedRes?.check_in_at) {
+                      setDispatchDate(selectedRes.check_in_at.split("T")[0]);
+                    }
                   }}
-                  className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[9px] font-bold"
+                  className="px-2 py-1 bg-[#D4AF37]/10 hover:bg-[#D4AF37]/20 text-[#D4AF37] border border-[#D4AF37]/35 rounded text-[10px] font-bold transition"
                 >
-                  PRE-ARRIVAL CLEANING
+                  {language === "en" ? "PRE-ARRIVAL CLEANING" : "สร้างใบงานเตรียมห้อง"}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setDispatchTitle("Checkout Turnover Turnover");
-                    setDispatchDesc("Guest is checked out. Perform deep cleaning and check for guest items.");
+                    setDispatchTitle(language === "en" ? "Checkout Turnover Cleaning" : "ทำความสะอาดหลังเช็คเอาต์");
+                    setDispatchDesc(language === "en" ? "Guest is checked out. Perform deep cleaning and check for guest items." : "ผู้เช่าย้ายออกแล้ว ทำความสะอาดห้องพักแบบละเอียดและตรวจเช็คความเรียบร้อยของห้องชุด");
                     setDispatchCategory("Cleaning");
                     setDispatchTeam("HOUSEKEEPING");
+                    if (selectedRes?.check_out_at) {
+                      setDispatchDate(selectedRes.check_out_at.split("T")[0]);
+                    }
                   }}
-                  className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[9px] font-bold"
+                  className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded text-[10px] font-bold transition"
                 >
-                  CHECKOUT TURNOVER
+                  {language === "en" ? "CHECKOUT TURNOVER" : "สร้างใบงานทำความสะอาดหลังเช็กเอาต์"}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
-                    setDispatchTitle("In-Stay Maintenance Service Check");
-                    setDispatchDesc("Air conditioner check or unit inspection service during stay.");
+                    setDispatchTitle(language === "en" ? "In-Stay Maintenance Service Check" : "บริการซ่อมบำรุงระหว่างเข้าพัก");
+                    setDispatchDesc(language === "en" ? "Air conditioner check or unit inspection service during stay." : "ตรวจเช็คระบบแอร์หรือระบบอื่นๆ ภายในห้องพักระหว่างการอยู่อาศัย");
                     setDispatchCategory("Maintenance");
                     setDispatchTeam("TECHNICIAN");
+                    setDispatchDate(new Date().toISOString().split("T")[0]);
                   }}
-                  className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[9px] font-bold"
+                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-350 rounded text-[10px] font-bold transition"
                 >
-                  IN-STAY MAINTENANCE
+                  {language === "en" ? "IN-STAY MAINTENANCE" : "สร้างใบงานซ่อมบำรุงระหว่างเข้าพัก"}
                 </button>
               </div>
 
