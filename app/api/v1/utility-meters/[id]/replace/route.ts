@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { utilityMeterService } from "@/services/utility-meter/utility-meter.service";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -9,7 +10,13 @@ export async function POST(request: Request, { params }: Params) {
   try {
     const { id: oldMeterId } = await params;
     const body = await request.json();
-    const { new_meter_number, starting_reading, final_reading, replacement_reason, replacement_date } = body;
+    const {
+      manufacturer_serial_number,
+      starting_reading,
+      final_reading,
+      replacement_reason,
+      replacement_date
+    } = body;
 
     const supabase = await createClient();
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -28,7 +35,7 @@ export async function POST(request: Request, { params }: Params) {
       return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 });
     }
 
-    // 1. Fetch old meter
+    // 1. Fetch old meter details
     const { data: oldMeter, error: oldErr } = await supabase
       .from("utility_meters")
       .select("*")
@@ -39,67 +46,77 @@ export async function POST(request: Request, { params }: Params) {
       return NextResponse.json({ success: false, message: "Old meter not found" }, { status: 404 });
     }
 
+    // 2. Validate property scope
     if (profile.role === "property_admin") {
       if (!profile.property_id || oldMeter.property_id !== profile.property_id) {
         return NextResponse.json({ success: false, message: "Forbidden: cross-property meter replacement denied" }, { status: 403 });
       }
     }
 
-    const repDate = replacement_date || new Date().toISOString().split("T")[0];
-
-    // 2. Perform replacement in db.
-    // Step A: Retire old meter
-    const { error: retireErr } = await supabase
-      .from("utility_meters")
-      .update({
-        meter_status: "INACTIVE",
-        retired_at: repDate
-      })
-      .eq("id", oldMeterId);
-
-    if (retireErr) throw retireErr;
-
-    // Step B: Insert new meter
-    const { data: newMeter, error: insertErr } = await supabase
-      .from("utility_meters")
-      .insert({
-        property_id: oldMeter.property_id,
-        unit_id: oldMeter.unit_id,
-        utility_type: oldMeter.utility_type,
-        meter_number: new_meter_number,
-        installed_at: repDate,
-        meter_status: "ACTIVE"
-      })
-      .select("*")
-      .single();
-
-    if (insertErr) {
-      // Rollback old meter
-      await supabase.from("utility_meters").update({ meter_status: "ACTIVE", retired_at: null }).eq("id", oldMeterId);
-      return NextResponse.json({ success: false, message: insertErr.message }, { status: 400 });
+    if (oldMeter.meter_status !== "ACTIVE") {
+      return NextResponse.json({ success: false, message: "Old meter is not active" }, { status: 400 });
     }
 
-    // Step C: Log history
-    const { error: histErr } = await supabase
-      .from("meter_replacement_history")
-      .insert({
-        property_id: oldMeter.property_id,
-        unit_id: oldMeter.unit_id,
-        utility_type: oldMeter.utility_type,
-        old_meter_id: oldMeterId,
-        old_meter_number: oldMeter.meter_number,
-        final_reading: final_reading || null,
-        new_meter_id: newMeter.id,
-        new_meter_number: new_meter_number,
-        starting_reading: starting_reading || 0.00,
-        replacement_reason: replacement_reason || "Meter replacement",
-        replaced_by: user.id,
-        replaced_at: new Date().toISOString()
-      });
+    const repDate = replacement_date || new Date().toISOString().split("T")[0];
 
-    if (histErr) throw histErr;
+    // 3. Fetch unit number for code generation
+    const { data: unit, error: unitError } = await supabase
+      .from("units")
+      .select("unit_number")
+      .eq("id", oldMeter.unit_id)
+      .single();
 
-    // Step D: Log Audit History
+    if (unitError || !unit) {
+      return NextResponse.json({ success: false, message: "Unit not found" }, { status: 404 });
+    }
+
+    const unitNum = unit.unit_number;
+
+    // 4. Check duplicate manufacturer serial check when supplied
+    const trimmedSerial = manufacturer_serial_number ? String(manufacturer_serial_number).trim() : "";
+    if (trimmedSerial !== "") {
+      const { count } = await supabase
+        .from("utility_meters")
+        .select("id", { count: "exact", head: true })
+        .eq("manufacturer_serial_number", trimmedSerial);
+
+      if (count && count > 0) {
+        return NextResponse.json({
+          success: false,
+          message: `เลข Serial ผู้ผลิต "${trimmedSerial}" ถูกใช้งานแล้วในระบบ`
+        }, { status: 400 });
+      }
+    }
+
+    // 5. Resolve sequence & generate Internal Meter Code
+    const seq = await utilityMeterService.resolveNextMeterSequence(supabase, oldMeter.unit_id, oldMeter.utility_type);
+    const newInternalCode = utilityMeterService.generateInstalledMeterCode(
+      unitNum,
+      oldMeter.utility_type,
+      repDate,
+      seq
+    );
+
+    // 6. Execute atomic replacement in DB
+    const { data: rpcResult, error: rpcErr } = await supabase.rpc("replace_utility_meter", {
+      p_old_meter_id: oldMeterId,
+      p_new_internal_code: newInternalCode,
+      p_manufacturer_serial_number: trimmedSerial !== "" ? trimmedSerial : null,
+      p_starting_reading: starting_reading !== undefined ? Number(starting_reading) : 0.00,
+      p_final_reading: final_reading !== undefined && final_reading !== null ? Number(final_reading) : null,
+      p_replacement_reason: replacement_reason || "Meter replacement",
+      p_replacement_date: repDate,
+      p_actor_id: user.id
+    });
+
+    if (rpcErr || !rpcResult?.success) {
+      return NextResponse.json({
+        success: false,
+        message: rpcErr?.message || "Failed to execute meter replacement transaction"
+      }, { status: 400 });
+    }
+
+    // 7. Write Audit Log
     await supabase.rpc("log_entity_change", {
       p_entity_type: "units",
       p_entity_id: oldMeter.unit_id,
@@ -108,16 +125,21 @@ export async function POST(request: Request, { params }: Params) {
         action: "METER_REPLACEMENT",
         utility_type: oldMeter.utility_type,
         old_meter_number: oldMeter.meter_number,
-        new_meter_number: new_meter_number,
+        new_meter_number: rpcResult.new_internal_code,
+        manufacturer_serial_number: trimmedSerial !== "" ? trimmedSerial : null,
         reason: replacement_reason
       },
-      p_reason: `Replaced ${oldMeter.utility_type} meter in Unit`
+      p_reason: `Replaced ${oldMeter.utility_type} meter in Unit ${unitNum}`
     });
 
     return NextResponse.json({
       success: true,
       message: "Meter replaced successfully",
-      data: { old_meter: oldMeterId, new_meter: newMeter.id }
+      data: {
+        old_meter: oldMeterId,
+        new_meter: rpcResult.new_meter_id,
+        new_internal_code: rpcResult.new_internal_code
+      }
     });
   } catch (error: unknown) {
     const err = error as Record<string, unknown> | null;

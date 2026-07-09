@@ -123,9 +123,11 @@ export interface UtilityMeter {
   unit_id: string;
   utility_type: "WATER" | "ELECTRICITY";
   meter_number: string;
-  meter_status: "ACTIVE" | "INACTIVE";
+  manufacturer_serial_number?: string | null;
+  installation_date_known?: boolean;
+  meter_status: "ACTIVE" | "INACTIVE" | "RETIRED";
   initial_reading: number;
-  installed_at: string;
+  installed_at: string | null;
   retired_at: string | null;
   created_at: string;
   updated_at: string;

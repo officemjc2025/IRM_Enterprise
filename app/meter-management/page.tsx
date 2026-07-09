@@ -43,6 +43,29 @@ interface ImportPreviewRow {
   validationMessage: string;
 }
 
+interface MeterPreviewRow {
+  source_row: number;
+  room_number: string;
+  utility_type: string;
+  meter_classification: string;
+  manufacturer_serial_number: string | null;
+  installed_date: string | null;
+  initial_reading: number;
+  note: string | null;
+  validationStatus: "VALID" | "ERROR";
+  validationMessage: string;
+  generated_code: string;
+}
+
+interface MeterImportResult {
+  success: boolean;
+  message?: string;
+  created?: number;
+  total?: number;
+  imported?: number;
+}
+
+
 const supabase = createClient();
 
 export default function MeterManagementPage() {
@@ -97,7 +120,6 @@ export default function MeterManagementPage() {
   const [showReturnModal, setShowReturnModal] = useState(false);
   const [selectedReadingIds, setSelectedReadingIds] = useState<string[]>([]);
   const [isBatchReturn, setIsBatchReturn] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
 
   // Rates tab state
   const [rates, setRates] = useState<UtilityRate[]>([]);
@@ -111,19 +133,23 @@ export default function MeterManagementPage() {
   const [units, setUnits] = useState<UnitOption[]>([]);
   const [meters, setMeters] = useState<UtilityMeter[]>([]);
   const [selectedMeterForReplace, setSelectedMeterForReplace] = useState<UtilityMeter | null>(null);
-  const [newMeterNumber, setNewMeterNumber] = useState("");
   const [startingReading, setStartingReading] = useState("");
   const [finalReading, setFinalReading] = useState("");
   const [replacementReason, setReplacementReason] = useState("");
   const [replaceFormError, setReplaceFormError] = useState<string | null>(null);
+  const [replacementManufacturerSerial, setReplacementManufacturerSerial] = useState("");
+  const [replacementDate, setReplacementDate] = useState("");
 
   // Meter Creation state
   const [showCreateMeterModal, setShowCreateMeterModal] = useState(false);
   const [newMeterUnitId, setNewMeterUnitId] = useState("");
   const [newMeterType, setNewMeterType] = useState<"WATER" | "ELECTRICITY">("WATER");
-  const [newMeterSerial, setNewMeterSerial] = useState("");
   const [newMeterInitialReading, setNewMeterInitialReading] = useState("");
   const [createMeterFormError, setCreateMeterFormError] = useState<string | null>(null);
+  const [newMeterClassification, setNewMeterClassification] = useState<"LEGACY" | "NEW">("LEGACY");
+  const [newMeterManufacturerSerial, setNewMeterManufacturerSerial] = useState("");
+  const [newMeterInstalledAt, setNewMeterInstalledAt] = useState("");
+  const [newMeterNote, setNewMeterNote] = useState("");
 
   // Meter Coverage info panel (replaces synthetic bootstrap modal)
   const [showCoverageInfoPanel, setShowCoverageInfoPanel] = useState(false);
@@ -148,6 +174,18 @@ export default function MeterManagementPage() {
     warnings: number;
   } | null>(null);
   const [importing, setImporting] = useState(false);
+
+  // Meter Registration Excel Import state
+  const [excelSubMode, setExcelSubMode] = useState<"readings" | "meters">("readings");
+  const [meterPreviewRows, setMeterPreviewRows] = useState<MeterPreviewRow[]>([]);
+  const [meterExcelFileName, setMeterExcelFileName] = useState("");
+  const [meterExcelFileSize, setMeterExcelFileSize] = useState("");
+  const [meterExcelParseStatus, setMeterExcelParseStatus] = useState<"IDLE" | "PARSING" | "SUCCESS" | "ERROR">("IDLE");
+  const [meterExcelError, setMeterExcelError] = useState<string | null>(null);
+  const [meterImportResult, setMeterImportResult] = useState<MeterImportResult | null>(null);
+  const [meterImporting, setMeterImporting] = useState(false);
+  const [meterExcelFilter, setMeterExcelFilter] = useState<"ALL" | "VALID" | "ERROR">("ALL");
+
 
   const safeFetchJson = async (url: string, options?: RequestInit) => {
     try {
@@ -520,8 +558,12 @@ export default function MeterManagementPage() {
   const handleCreateMeter = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateMeterFormError(null);
-    if (!newMeterUnitId || !newMeterSerial || !newMeterInitialReading) {
+    if (!newMeterUnitId || !newMeterInitialReading) {
       setCreateMeterFormError(language === "en" ? "Please fill all fields" : "กรุณากรอกข้อมูลให้ครบถ้วน");
+      return;
+    }
+    if (newMeterClassification === "NEW" && !newMeterInstalledAt) {
+      setCreateMeterFormError(language === "en" ? "Installed date is required for NEW meters" : "กรุณาระบุวันที่ติดตั้ง");
       return;
     }
     try {
@@ -532,15 +574,22 @@ export default function MeterManagementPage() {
           property_id: selectedProperty,
           unit_id: newMeterUnitId,
           utility_type: newMeterType,
-          meter_number: newMeterSerial,
-          initial_reading: Number(newMeterInitialReading)
+          meter_classification: newMeterClassification,
+          manufacturer_serial_number: newMeterManufacturerSerial || null,
+          installed_at: newMeterInstalledAt || null,
+          initial_reading: Number(newMeterInitialReading),
+          note: newMeterNote
         })
       });
       const json = await res.json();
       if (json.success) {
         setShowCreateMeterModal(false);
-        setNewMeterSerial("");
+        setNewMeterUnitId("");
+        setNewMeterManufacturerSerial("");
+        setNewMeterInstalledAt("");
         setNewMeterInitialReading("");
+        setNewMeterNote("");
+        setNewMeterClassification("LEGACY");
         fetchRegistry();
       } else {
         setCreateMeterFormError(json.message);
@@ -554,7 +603,7 @@ export default function MeterManagementPage() {
   const handleReplaceMeter = async (e: React.FormEvent) => {
     e.preventDefault();
     setReplaceFormError(null);
-    if (!selectedMeterForReplace || !newMeterNumber || !startingReading || !replacementReason) {
+    if (!selectedMeterForReplace || !startingReading || !replacementReason || !replacementDate) {
       setReplaceFormError(language === "en" ? "Please fill all fields" : "กรุณากรอกข้อมูลให้ครบถ้วน");
       return;
     }
@@ -563,19 +612,21 @@ export default function MeterManagementPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          new_meter_number: newMeterNumber,
+          manufacturer_serial_number: replacementManufacturerSerial || null,
           starting_reading: Number(startingReading),
           final_reading: finalReading ? Number(finalReading) : null,
-          replacement_reason: replacementReason
+          replacement_reason: replacementReason,
+          replacement_date: replacementDate
         })
       });
       const json = await res.json();
       if (json.success) {
         setSelectedMeterForReplace(null);
-        setNewMeterNumber("");
+        setReplacementManufacturerSerial("");
         setStartingReading("");
         setFinalReading("");
         setReplacementReason("");
+        setReplacementDate("");
         fetchRegistry();
       } else {
         setReplaceFormError(json.message);
@@ -640,7 +691,6 @@ export default function MeterManagementPage() {
     if (!returnNote) return;
     try {
       if (isBatchReturn) {
-        setSubmitting(true);
         for (const id of selectedReadingIds) {
           await fetch(`/api/v1/meter-readings/${id}/return`, {
             method: "POST",
@@ -648,7 +698,6 @@ export default function MeterManagementPage() {
             body: JSON.stringify({ manager_note: returnNote })
           });
         }
-        setSubmitting(false);
         setIsBatchReturn(false);
         setSelectedReadingIds([]);
       } else {
@@ -979,8 +1028,7 @@ export default function MeterManagementPage() {
           let roomCol = headerCells.findIndex(h => h.includes("ห้องชุดเลขที่") || h.includes("Room"));
           if (roomCol === -1) roomCol = 1; // fallback to standard position
 
-          // Water prev/curr are always at columns 4 and 5 in the standard layout
-          const waterPrevCol = 4;
+          // Water current reading is at column 5 in the standard layout
           const waterCurrCol = 5;
 
           for (let i = dataStartRow; i < rawRows.length; i++) {
@@ -1111,6 +1159,221 @@ export default function MeterManagementPage() {
     }
   };
 
+  // Download Excel template for bulk meter master import
+  const handleDownloadMeterTemplate = () => {
+    const headers = [
+      ["UNIT_NUMBER", "UTILITY_TYPE", "METER_CLASSIFICATION", "MANUFACTURER_SERIAL_NUMBER", "INSTALLED_DATE", "INITIAL_READING", "NOTE"],
+      ["420/105", "WATER", "LEGACY", "", "", "0.00", "Legitimate legacy water meter confirmed"],
+      ["420/105", "ELECTRICITY", "NEW", "ABC1234567", "2026-07-09", "0.00", "New replacement electricity meter"]
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(headers);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Meters Template");
+    XLSX.writeFile(wb, "IRM_Meter_Master_Template.xlsx");
+  };
+
+  // Excel Upload for Meter Registration Preview and Server-Side validation
+  const handleMeterExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setMeterImportResult(null);
+    setMeterExcelError(null);
+    setMeterPreviewRows([]);
+    setMeterExcelFileName(file.name);
+
+    const sizeInMB = file.size / (1024 * 1024);
+    setMeterExcelFileSize(`${sizeInMB.toFixed(2)} MB`);
+
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      setMeterExcelParseStatus("ERROR");
+      setMeterExcelError(language === "en" ? "Only .xlsx files are supported" : "ระบบรองรับไฟล์นามสกุล .xlsx เท่านั้น");
+      return;
+    }
+
+    setMeterExcelParseStatus("PARSING");
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+
+        const rawRows: (string | number | boolean | null | undefined)[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+
+        if (rawRows.length === 0) {
+          setMeterExcelParseStatus("ERROR");
+          setMeterExcelError(language === "en" ? "Empty workbook" : "ไฟล์ Excel ไม่มีข้อมูล");
+          return;
+        }
+
+        // Column headers mapping
+        const headers = rawRows[0].map(h => String(h || "").trim().toUpperCase());
+        const colIdx = {
+          unit: headers.indexOf("UNIT_NUMBER"),
+          type: headers.indexOf("UTILITY_TYPE"),
+          classification: headers.indexOf("METER_CLASSIFICATION"),
+          serial: headers.indexOf("MANUFACTURER_SERIAL_NUMBER"),
+          installed_date: headers.indexOf("INSTALLED_DATE"),
+          reading: headers.indexOf("INITIAL_READING"),
+          note: headers.indexOf("NOTE")
+        };
+
+        if (colIdx.unit === -1 || colIdx.type === -1 || colIdx.classification === -1) {
+          setMeterExcelParseStatus("ERROR");
+          setMeterExcelError(
+            language === "en"
+              ? "Invalid template. Required columns: UNIT_NUMBER, UTILITY_TYPE, METER_CLASSIFICATION"
+              : "โครงสร้างแบบฟอร์มไม่ถูกต้อง กรุณาใช้ไฟล์เทมเพลตขึ้นทะเบียนที่กำหนด"
+          );
+          return;
+        }
+
+        interface UploadRowInput {
+          room_number: string;
+          utility_type: string;
+          meter_classification: string;
+          manufacturer_serial_number: string;
+          installed_date: string;
+          initial_reading: number;
+          note: string;
+        }
+
+        const rows: UploadRowInput[] = [];
+        for (let i = 1; i < rawRows.length; i++) {
+          const row = rawRows[i];
+          if (!row || row.every(c => c === "")) continue;
+
+          rows.push({
+            room_number: String(row[colIdx.unit] ?? "").trim(),
+            utility_type: String(row[colIdx.type] ?? "").trim(),
+            meter_classification: String(row[colIdx.classification] ?? "").trim(),
+            manufacturer_serial_number: colIdx.serial !== -1 ? String(row[colIdx.serial] ?? "").trim() : "",
+            installed_date: colIdx.installed_date !== -1 ? String(row[colIdx.installed_date] ?? "").trim() : "",
+            initial_reading: colIdx.reading !== -1 ? (row[colIdx.reading] !== "" ? Number(row[colIdx.reading]) : 0) : 0,
+            note: colIdx.note !== -1 ? String(row[colIdx.note] ?? "").trim() : ""
+          });
+        }
+
+        if (rows.length === 0) {
+          setMeterExcelParseStatus("ERROR");
+          setMeterExcelError(language === "en" ? "No data rows found" : "ไม่พบแถวข้อมูลใดๆ ในไฟล์");
+          return;
+        }
+
+        // Call server-side dry-run validation endpoint
+        const res = await fetch("/api/v1/utility-meters/bootstrap", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            property_id: selectedProperty,
+            meters: rows,
+            dry_run: true
+          })
+        });
+
+        const json = await res.json();
+        if (json.success) {
+          setMeterPreviewRows(json.data || []);
+          setMeterExcelParseStatus("SUCCESS");
+        } else {
+          setMeterExcelParseStatus("ERROR");
+          setMeterExcelError(json.message || "Validation failed");
+        }
+      } catch (err: unknown) {
+        console.error(err);
+        const errMsg = err instanceof Error ? err.message : String(err);
+        setMeterExcelParseStatus("ERROR");
+        setMeterExcelError((language === "en" ? "Failed to parse workbook: " : "ไม่สามารถอ่านโครงสร้างไฟล์ Excel ได้: ") + errMsg);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  // Confirm Excel Bulk Meter Master Registration
+  const handleConfirmMeterImport = async () => {
+    if (meterPreviewRows.length === 0) return;
+    const hasErrors = meterPreviewRows.some(r => r.validationStatus === "ERROR");
+    if (hasErrors) {
+      alert(language === "en" ? "Please correct all error rows before importing." : "กรุณาแก้ไขแถวข้อมูลที่มีข้อผิดพลาดก่อนกดยืนยัน");
+      return;
+    }
+
+    setMeterImporting(true);
+    try {
+      const payload = meterPreviewRows.map(r => ({
+        room_number: r.room_number,
+        utility_type: r.utility_type,
+        meter_classification: r.meter_classification,
+        manufacturer_serial_number: r.manufacturer_serial_number,
+        installed_date: r.installed_date,
+        initial_reading: r.initial_reading,
+        note: r.note
+      }));
+
+      const res = await fetch("/api/v1/utility-meters/bootstrap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          property_id: selectedProperty,
+          meters: payload,
+          dry_run: false
+        })
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        setMeterImportResult({
+          success: true,
+          total: payload.length,
+          imported: json.created
+        });
+        setMeterPreviewRows([]);
+        fetchRegistry();
+      } else {
+        alert(json.message);
+      }
+    } catch (err) {
+      console.error(err);
+      alert(language === "en" ? "Import failed." : "เกิดข้อผิดพลาดในการนำเข้ามิเตอร์");
+    } finally {
+      setMeterImporting(false);
+    }
+  };
+
+  // Export Registry List sorted naturally
+  const handleExportRegistry = () => {
+    const sortedMeters = [...meters].sort((a, b) => {
+      const numA = a.unit?.unit_number || "";
+      const numB = b.unit?.unit_number || "";
+      return compareUnitNumbers(numA, numB);
+    });
+
+    const exportData = sortedMeters.map(m => {
+      const codeParts = m.meter_number.split("-");
+      const seq = parseInt(codeParts[codeParts.length - 1], 10) || 1;
+
+      return {
+        "UNIT_NUMBER": m.unit?.unit_number || "",
+        "UTILITY_TYPE": m.utility_type,
+        "INTERNAL_METER_CODE": m.meter_number,
+        "MANUFACTURER_SERIAL_NUMBER": m.manufacturer_serial_number || "",
+        "METER_STATUS": m.meter_status,
+        "INSTALLED_DATE": m.installed_at || "",
+        "INITIAL_READING": m.initial_reading,
+        "RETIRED_DATE": m.retired_at || "",
+        "REPLACEMENT_SEQUENCE": seq
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Meter Registry");
+    XLSX.writeFile(wb, "IRM_Meter_Registry.xlsx");
+  };
+
   // Render RLS checks / Fail Closed
   const isAuthorized = role && ["super_admin", "admin", "property_admin"].includes(role);
   if (loading) {
@@ -1135,6 +1398,11 @@ export default function MeterManagementPage() {
   const filteredPreviewRows = previewRows.filter(r => {
     if (excelFilter === "ALL") return true;
     return r.validationStatus === excelFilter;
+  });
+
+  const filteredMeterPreviewRows = meterPreviewRows.filter(r => {
+    if (meterExcelFilter === "ALL") return true;
+    return r.validationStatus === meterExcelFilter;
   });
 
   return (
@@ -1564,213 +1832,412 @@ export default function MeterManagementPage() {
         {/* Tab 4: Excel Import/Export */}
         {activeTab === "excel" && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Export Panel */}
-              <div className="bg-white dark:bg-slate-800 p-6 border rounded-xl shadow-sm space-y-4">
-                <h4 className="font-bold text-slate-800 dark:text-white">
-                  📤 {language === "en" ? "Export Reading Template" : "ส่งออกฟอร์มบันทึกข้อมูลมิเตอร์"}
-                </h4>
-                <p className="text-xs text-slate-400">
-                  {language === "en" ? "Export the selected cycle configuration list to an Excel workbook for manual reading capture." : "ดาวน์โหลดโครงร่างข้อมูลรายการจดบันทึกมิเตอร์เป็นไฟล์ Excel เพื่อให้เจ้าหน้าที่นำไปบันทึกข้อมูล"}
-                </p>
-                <div className="flex flex-col gap-2">
-                  <button
-                    onClick={handleExcelExport}
-                    disabled={selectedCycle === "ALL"}
-                    className={`px-4 py-2.5 text-white font-bold rounded-xl transition text-xs shadow flex items-center justify-center gap-2 ${
-                      selectedCycle === "ALL" ? "bg-slate-300 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"
-                    }`}
-                  >
-                    📥 {language === "en" ? "Export Excel Template" : "ดาวน์โหลดเทมเพลต Excel"}
-                  </button>
-                  <button
-                    onClick={handleStandardExport}
-                    disabled={selectedCycle === "ALL"}
-                    className={`px-4 py-2.5 text-white font-bold rounded-xl transition text-xs shadow flex items-center justify-center gap-2 ${
-                      selectedCycle === "ALL" ? "bg-slate-300 cursor-not-allowed" : "bg-[#D4AF37] hover:bg-[#D4AF37]/90"
-                    }`}
-                  >
-                    📊 {language === "en" ? "Export Standard Summary" : "ส่งออกตารางสรุปมาตรฐาน"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Import Panel */}
-              <div className="bg-white dark:bg-slate-800 p-6 border rounded-xl shadow-sm space-y-4">
-                <h4 className="font-bold text-slate-800 dark:text-white">
-                  📥 {language === "en" ? "Upload Completed Excel File" : "นำเข้าข้อมูลจาก Excel"}
-                </h4>
-                <p className="text-xs text-slate-400">
-                  {language === "en" ? "Upload the completed Excel file to preview, validate constraints, and batch import readings." : "อัปโหลดไฟล์จดมิเตอร์ Excel ที่พนักงานกรอกข้อมูลแล้ว เพื่อเข้าสู่ขั้นตอนตรวจสอบและประมวลผลก่อนอนุมัติ"}
-                </p>
-                <div className="flex flex-col gap-2">
-                  <input
-                    type="file"
-                    accept=".xlsx"
-                    onChange={handleExcelUpload}
-                    disabled={selectedCycle === "ALL" || importing}
-                    className="text-xs border p-2 rounded-xl dark:bg-slate-900 w-full outline-none"
-                  />
-                  {selectedCycle === "ALL" && (
-                    <span className="text-[10px] text-amber-500 font-semibold">
-                      ⚠️ {language === "en" ? "Select a cycle from top drop-down before uploading." : "กรุณาเลือกหนึ่งรอบจดมิเตอร์ที่เมนูด้านบนขวาก่อนทำการเลือกไฟล์"}
-                    </span>
-                  )}
-                  {excelFileName && (
-                    <div className="text-[11px] p-2 bg-slate-50 dark:bg-slate-900 border rounded-lg space-y-1">
-                      <div><span className="font-bold text-slate-500">{language === "en" ? "File:" : "ชื่อไฟล์:"}</span> {excelFileName}</div>
-                      <div><span className="font-bold text-slate-500">{language === "en" ? "Size:" : "ขนาด:"}</span> {excelFileSize}</div>
-                      {excelParseStatus === "PARSING" && (
-                        <div className="text-amber-500 font-bold animate-pulse">⏳ {language === "en" ? "Parsing file..." : "กำลังอ่านและตรวจสอบโครงสร้างไฟล์..."}</div>
-                      )}
-                      {excelParseStatus === "SUCCESS" && (
-                        <div className="text-emerald-500 font-bold">✓ {language === "en" ? "Parsing completed. Ready to preview." : "อ่านข้อมูลเสร็จสิ้น สามารถตรวจสอบตารางด้านล่างได้"}</div>
-                      )}
-                      {excelParseStatus === "ERROR" && (
-                        <div className="text-rose-500 font-bold bg-rose-50 dark:bg-rose-950/20 p-1.5 border border-rose-100 rounded">❌ {excelError}</div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
+            {/* Sub-mode selector */}
+            <div className="flex border-b border-slate-200 dark:border-slate-700">
+              <button
+                onClick={() => setExcelSubMode("readings")}
+                className={`py-2.5 px-4 font-bold text-xs border-b-2 transition ${
+                  excelSubMode === "readings"
+                    ? "border-[#D4AF37] text-slate-800 dark:text-white"
+                    : "border-transparent text-slate-400 hover:text-slate-600"
+                }`}
+              >
+                📝 {language === "en" ? "Meter Readings (Import/Export)" : "นำเข้า/ส่งออก ข้อมูลการจดมิเตอร์"}
+              </button>
+              <button
+                onClick={() => setExcelSubMode("meters")}
+                className={`py-2.5 px-4 font-bold text-xs border-b-2 transition ${
+                  excelSubMode === "meters"
+                    ? "border-[#D4AF37] text-slate-800 dark:text-white"
+                    : "border-transparent text-slate-400 hover:text-slate-600"
+                }`}
+              >
+                💾 {language === "en" ? "Meter Registry (Import/Export)" : "นำเข้า/ส่งออก ทะเบียนคุมมิเตอร์"}
+              </button>
             </div>
 
-            {/* Import Results Screen */}
-            {importResult && (
-              <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 text-emerald-800 dark:text-emerald-400 rounded-xl space-y-2 text-xs font-semibold">
-                <h4 className="font-bold text-sm">🎉 {language === "en" ? "Excel Batch Import Completed" : "นำเข้าไฟล์จดมิเตอร์สำเร็จ"}</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>{language === "en" ? "Total Items:" : "รายการทั้งหมด:"} <span className="font-bold font-mono">{importResult.total}</span></div>
-                  <div>{language === "en" ? "Successfully Imported:" : "นำเข้าสำเร็จ:"} <span className="font-bold font-mono text-emerald-600">{importResult.imported}</span></div>
-                  <div>{language === "en" ? "Abnormal Warnings:" : "ตรวจพบคำเตือนผิดปกติ:"} <span className="font-bold font-mono text-amber-600">{importResult.warnings}</span></div>
-                  <div>{language === "en" ? "Failed / Errors:" : "เกิดข้อผิดพลาด:"} <span className="font-bold font-mono text-rose-600">0</span></div>
+            {excelSubMode === "readings" && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Export Panel */}
+                  <div className="bg-white dark:bg-slate-800 p-6 border rounded-xl shadow-sm space-y-4">
+                    <h4 className="font-bold text-slate-800 dark:text-white">
+                      📤 {language === "en" ? "Export Reading Template" : "ส่งออกฟอร์มบันทึกข้อมูลมิเตอร์"}
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      {language === "en" ? "Export the selected cycle configuration list to an Excel workbook for manual reading capture." : "ดาวน์โหลดโครงร่างข้อมูลรายการจดบันทึกมิเตอร์เป็นไฟล์ Excel เพื่อให้เจ้าหน้าที่นำไปบันทึกข้อมูล"}
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={handleExcelExport}
+                        disabled={selectedCycle === "ALL"}
+                        className={`px-4 py-2.5 text-white font-bold rounded-xl transition text-xs shadow flex items-center justify-center gap-2 ${
+                          selectedCycle === "ALL" ? "bg-slate-300 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700"
+                        }`}
+                      >
+                        📥 {language === "en" ? "Export Excel Template" : "ดาวน์โหลดเทมเพลต Excel"}
+                      </button>
+                      <button
+                        onClick={handleStandardExport}
+                        disabled={selectedCycle === "ALL"}
+                        className={`px-4 py-2.5 text-white font-bold rounded-xl transition text-xs shadow flex items-center justify-center gap-2 ${
+                          selectedCycle === "ALL" ? "bg-slate-300 cursor-not-allowed" : "bg-[#D4AF37] hover:bg-[#D4AF37]/90"
+                        }`}
+                      >
+                        📊 {language === "en" ? "Export Standard Summary" : "ส่งออกตารางสรุปมาตรฐาน"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Import Panel */}
+                  <div className="bg-white dark:bg-slate-800 p-6 border rounded-xl shadow-sm space-y-4">
+                    <h4 className="font-bold text-slate-800 dark:text-white">
+                      📥 {language === "en" ? "Upload Completed Excel File" : "นำเข้าข้อมูลจาก Excel"}
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      {language === "en" ? "Upload the completed Excel file to preview, validate constraints, and batch import readings." : "อัปโหลดไฟล์จดมิเตอร์ Excel ที่พนักงานกรอกข้อมูลแล้ว เพื่อเข้าสู่ขั้นตอนตรวจสอบและประมวลผลก่อนอนุมัติ"}
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      <input
+                        type="file"
+                        accept=".xlsx"
+                        onChange={handleExcelUpload}
+                        disabled={selectedCycle === "ALL" || importing}
+                        className="text-xs border p-2 rounded-xl dark:bg-slate-900 w-full outline-none"
+                      />
+                      {selectedCycle === "ALL" && (
+                        <span className="text-[10px] text-amber-500 font-semibold">
+                          ⚠️ {language === "en" ? "Select a cycle from top drop-down before uploading." : "กรุณาเลือกหนึ่งรอบจดมิเตอร์ที่เมนูด้านบนขวาก่อนทำการเลือกไฟล์"}
+                        </span>
+                      )}
+                      {excelFileName && (
+                        <div className="text-[11px] p-2 bg-slate-50 dark:bg-slate-900 border rounded-lg space-y-1">
+                          <div><span className="font-bold text-slate-500">{language === "en" ? "File:" : "ชื่อไฟล์:"}</span> {excelFileName}</div>
+                          <div><span className="font-bold text-slate-500">{language === "en" ? "Size:" : "ขนาด:"}</span> {excelFileSize}</div>
+                          {excelParseStatus === "PARSING" && (
+                            <div className="text-amber-500 font-bold animate-pulse">⏳ {language === "en" ? "Parsing file..." : "กำลังอ่านและตรวจสอบโครงสร้างไฟล์..."}</div>
+                          )}
+                          {excelParseStatus === "SUCCESS" && (
+                            <div className="text-emerald-500 font-bold">✓ {language === "en" ? "Parsing completed. Ready to preview." : "อ่านข้อมูลเสร็จสิ้น สามารถตรวจสอบตารางด้านล่างได้"}</div>
+                          )}
+                          {excelParseStatus === "ERROR" && (
+                            <div className="text-rose-500 font-bold bg-rose-50 dark:bg-rose-950/20 p-1.5 border border-rose-100 rounded">❌ {excelError}</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
+
+                {/* Import Results Screen */}
+                {importResult && (
+                  <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 text-emerald-800 dark:text-emerald-400 rounded-xl space-y-2 text-xs font-semibold">
+                    <h4 className="font-bold text-sm">🎉 {language === "en" ? "Excel Batch Import Completed" : "นำเข้าไฟล์จดมิเตอร์สำเร็จ"}</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div>{language === "en" ? "Total Items:" : "รายการทั้งหมด:"} <span className="font-bold font-mono">{importResult.total}</span></div>
+                      <div>{language === "en" ? "Successfully Imported:" : "นำเข้าสำเร็จ:"} <span className="font-bold font-mono text-emerald-600">{importResult.imported}</span></div>
+                      <div>{language === "en" ? "Abnormal Warnings:" : "ตรวจพบคำเตือนผิดปกติ:"} <span className="font-bold font-mono text-amber-600">{importResult.warnings}</span></div>
+                      <div>{language === "en" ? "Failed / Errors:" : "เกิดข้อผิดพลาด:"} <span className="font-bold font-mono text-rose-600">0</span></div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Preview table & validation pipeline */}
+                {previewRows.length > 0 && (
+                  <div className="space-y-4">
+                    {/* Summary cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+                      <div className="bg-slate-50 dark:bg-slate-900 border rounded-xl p-3 text-center">
+                        <div className="text-slate-400 font-semibold">{language === "en" ? "Total" : "ทั้งหมด"}</div>
+                        <div className="text-lg font-bold font-mono">{previewRows.length}</div>
+                      </div>
+                      <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 rounded-xl p-3 text-center">
+                        <div className="text-emerald-500 font-semibold">{language === "en" ? "Ready" : "พร้อมนำเข้า"}</div>
+                        <div className="text-lg font-bold font-mono text-emerald-600">{previewRows.filter(r => r.validationStatus === "VALID").length}</div>
+                      </div>
+                      <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-100 rounded-xl p-3 text-center">
+                        <div className="text-amber-500 font-semibold">{language === "en" ? "Warnings" : "ต้องตรวจสอบ"}</div>
+                        <div className="text-lg font-bold font-mono text-amber-600">{previewRows.filter(r => r.validationStatus === "WARNING").length}</div>
+                      </div>
+                      <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 rounded-xl p-3 text-center">
+                        <div className="text-blue-500 font-semibold">{language === "en" ? "Duplicates" : "ข้อมูลซ้ำ"}</div>
+                        <div className="text-lg font-bold font-mono text-blue-600">{previewRows.filter(r => r.validationStatus === "DUPLICATE").length}</div>
+                      </div>
+                      <div className="bg-rose-50 dark:bg-rose-950/20 border border-rose-100 rounded-xl p-3 text-center">
+                        <div className="text-rose-500 font-semibold">{language === "en" ? "Errors" : "ผิดพลาด"}</div>
+                        <div className="text-lg font-bold font-mono text-rose-600">{previewRows.filter(r => r.validationStatus === "ERROR").length}</div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                      <div className="flex bg-slate-100 dark:bg-slate-900 rounded-xl p-1 text-[10px] font-bold flex-wrap gap-0.5">
+                        <button
+                          onClick={() => setExcelFilter("ALL")}
+                          className={`px-3 py-1 rounded ${excelFilter === "ALL" ? "bg-white text-slate-800 shadow" : "text-slate-400"}`}
+                        >
+                          {language === "en" ? "All" : "ทั้งหมด"} ({previewRows.length})
+                        </button>
+                        <button
+                          onClick={() => setExcelFilter("VALID")}
+                          className={`px-3 py-1 rounded ${excelFilter === "VALID" ? "bg-white text-slate-800 shadow" : "text-slate-400"}`}
+                        >
+                          {language === "en" ? "Valid" : "พร้อมนำเข้า"} ({previewRows.filter(r => r.validationStatus === "VALID").length})
+                        </button>
+                        <button
+                          onClick={() => setExcelFilter("WARNING")}
+                          className={`px-3 py-1 rounded ${excelFilter === "WARNING" ? "bg-white text-slate-800 shadow" : "text-slate-400"}`}
+                        >
+                          {language === "en" ? "Warnings" : "ต้องตรวจสอบ"} ({previewRows.filter(r => r.validationStatus === "WARNING").length})
+                        </button>
+                        <button
+                          onClick={() => setExcelFilter("DUPLICATE")}
+                          className={`px-3 py-1 rounded ${excelFilter === "DUPLICATE" ? "bg-white text-slate-800 shadow" : "text-slate-400"}`}
+                        >
+                          {language === "en" ? "Duplicates" : "ซ้ำ"} ({previewRows.filter(r => r.validationStatus === "DUPLICATE").length})
+                        </button>
+                        <button
+                          onClick={() => setExcelFilter("ERROR")}
+                          className={`px-3 py-1 rounded ${excelFilter === "ERROR" ? "bg-white text-slate-800 shadow" : "text-slate-400"}`}
+                        >
+                          {language === "en" ? "Errors" : "ผิดพลาด"} ({previewRows.filter(r => r.validationStatus === "ERROR").length})
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={handleConfirmImport}
+                        disabled={previewRows.some(r => r.validationStatus === "ERROR" || r.validationStatus === "DUPLICATE") || importing}
+                        className={`px-4 py-2 text-white font-bold rounded-xl text-xs transition shadow ${
+                          previewRows.some(r => r.validationStatus === "ERROR" || r.validationStatus === "DUPLICATE") || importing
+                            ? "bg-slate-350 cursor-not-allowed"
+                            : "bg-[#D4AF37] hover:bg-[#D4AF37]/90"
+                        }`}
+                      >
+                        {importing ? (language === "en" ? "Importing..." : "กำลังนำเข้า...") : `🚀 ${language === "en" ? "Confirm Import batch" : "ยืนยันนำเข้าข้อมูลเข้าคิวรอตรวจ"}`}
+                      </button>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-800 border rounded-xl overflow-x-auto shadow-sm">
+                      <table className="w-full text-xs text-left">
+                        <thead className="bg-slate-50 dark:bg-slate-900 border-b font-bold text-slate-500">
+                          <tr>
+                            <th className="p-3">{language === "en" ? "Row" : "แถว"}</th>
+                            <th className="p-3">{language === "en" ? "Room" : "เลขห้อง"}</th>
+                            <th className="p-3">{language === "en" ? "Utility" : "ประเภทมิเตอร์"}</th>
+                            <th className="p-3">{language === "en" ? "Meter" : "เลขมิเตอร์"}</th>
+                            <th className="p-3">{language === "en" ? "Previous" : "เลขครั้งก่อน"}</th>
+                            <th className="p-3">{language === "en" ? "Current" : "เลขครั้งใหม่"}</th>
+                            <th className="p-3">{language === "en" ? "Usage" : "หน่วยใช้"}</th>
+                            <th className="p-3">{language === "en" ? "Result" : "ผลตรวจสอบ"}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y text-slate-700 dark:text-slate-350">
+                          {filteredPreviewRows.map((r, index) => (
+                            <tr key={index} className={`hover:bg-slate-50/50 ${
+                              r.validationStatus === "ERROR" ? "bg-rose-50/30 dark:bg-rose-950/10" :
+                              r.validationStatus === "DUPLICATE" ? "bg-blue-50/30 dark:bg-blue-950/10" :
+                              r.validationStatus === "WARNING" ? "bg-amber-50/30 dark:bg-amber-950/10" : ""
+                            }`}>
+                              <td className="p-3 text-slate-400 font-mono">{r.source_row}</td>
+                              <td className="p-3 font-semibold">{r.room_number}</td>
+                              <td className="p-3">
+                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  r.utility_type === "WATER" ? "bg-sky-50 text-sky-600 border border-sky-100" : "bg-yellow-50 text-yellow-600 border border-yellow-100"
+                                }`}>
+                                  {r.utility_type === "WATER" ? (language === "en" ? "Water" : "น้ำ") : (language === "en" ? "Elec" : "ไฟ")}
+                                </span>
+                              </td>
+                              <td className="p-3 font-mono text-[10px]">{r.meter_number || "-"}</td>
+                              <td className="p-3 font-mono">{r.previous_reading}</td>
+                              <td className="p-3 font-mono font-bold">{r.current_reading ?? "-"}</td>
+                              <td className="p-3 font-mono">{r.usage !== null && r.usage !== undefined ? r.usage : "-"}</td>
+                              <td className="p-3 font-bold">
+                                <span className={`px-2 py-0.5 rounded text-[10px] ${
+                                  r.validationStatus === "VALID" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
+                                  r.validationStatus === "WARNING" ? "bg-amber-50 text-amber-600 border border-amber-100" :
+                                  r.validationStatus === "DUPLICATE" ? "bg-blue-50 text-blue-600 border border-blue-100" :
+                                  "bg-rose-50 text-rose-600 border border-rose-100"
+                                }`}>
+                                  {r.validationStatus === "VALID" ? "✓" : r.validationStatus === "WARNING" ? "⚠" : r.validationStatus === "DUPLICATE" ? "🔁" : "✗"} {r.validationMessage || "OK"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Preview table & validation pipeline */}
-            {previewRows.length > 0 && (
-              <div className="space-y-4">
-                {/* Summary cards */}
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
-                  <div className="bg-slate-50 dark:bg-slate-900 border rounded-xl p-3 text-center">
-                    <div className="text-slate-400 font-semibold">{language === "en" ? "Total" : "ทั้งหมด"}</div>
-                    <div className="text-lg font-bold font-mono">{previewRows.length}</div>
+            {excelSubMode === "meters" && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Export Registry Template Panel */}
+                  <div className="bg-white dark:bg-slate-800 p-6 border rounded-xl shadow-sm space-y-4">
+                    <h4 className="font-bold text-slate-800 dark:text-white">
+                      📤 {language === "en" ? "Download Registration Template" : "ส่งออกแบบฟอร์มขึ้นทะเบียนมิเตอร์"}
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      {language === "en" ? "Download the Excel template to prepare your meter master list for bulk registration." : "ดาวน์โหลดไฟล์เทมเพลต Excel เพื่อเตรียมข้อมูลขึ้นทะเบียนมิเตอร์จำนวนมาก"}
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={handleDownloadMeterTemplate}
+                        className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition text-xs shadow flex items-center justify-center gap-2"
+                      >
+                        📥 {language === "en" ? "Download XLSX Template" : "ดาวน์โหลดเทมเพลต Excel"}
+                      </button>
+                    </div>
                   </div>
-                  <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 rounded-xl p-3 text-center">
-                    <div className="text-emerald-500 font-semibold">{language === "en" ? "Ready" : "พร้อมนำเข้า"}</div>
-                    <div className="text-lg font-bold font-mono text-emerald-600">{previewRows.filter(r => r.validationStatus === "VALID").length}</div>
-                  </div>
-                  <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-100 rounded-xl p-3 text-center">
-                    <div className="text-amber-500 font-semibold">{language === "en" ? "Warnings" : "ต้องตรวจสอบ"}</div>
-                    <div className="text-lg font-bold font-mono text-amber-600">{previewRows.filter(r => r.validationStatus === "WARNING").length}</div>
-                  </div>
-                  <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-100 rounded-xl p-3 text-center">
-                    <div className="text-blue-500 font-semibold">{language === "en" ? "Duplicates" : "ข้อมูลซ้ำ"}</div>
-                    <div className="text-lg font-bold font-mono text-blue-600">{previewRows.filter(r => r.validationStatus === "DUPLICATE").length}</div>
-                  </div>
-                  <div className="bg-rose-50 dark:bg-rose-950/20 border border-rose-100 rounded-xl p-3 text-center">
-                    <div className="text-rose-500 font-semibold">{language === "en" ? "Errors" : "ผิดพลาด"}</div>
-                    <div className="text-lg font-bold font-mono text-rose-600">{previewRows.filter(r => r.validationStatus === "ERROR").length}</div>
+
+                  {/* Import Registry Panel */}
+                  <div className="bg-white dark:bg-slate-800 p-6 border rounded-xl shadow-sm space-y-4">
+                    <h4 className="font-bold text-slate-800 dark:text-white">
+                      📥 {language === "en" ? "Upload Meter Registration File" : "นำเข้าทะเบียนคุมมิเตอร์จาก Excel"}
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      {language === "en" ? "Upload the completed Excel file to preview, validate serial constraints, and bulk register meters." : "อัปโหลดไฟล์ Excel ทะเบียนคุมมิเตอร์เพื่อตรวจสอบโครงสร้างและขึ้นทะเบียนมิเตอร์พร้อมกันหลายห้อง"}
+                    </p>
+                    <div className="flex flex-col gap-2">
+                      <input
+                        type="file"
+                        accept=".xlsx"
+                        onChange={handleMeterExcelUpload}
+                        disabled={meterImporting}
+                        className="text-xs border p-2 rounded-xl dark:bg-slate-900 w-full outline-none"
+                      />
+                      {meterExcelFileName && (
+                        <div className="text-[11px] p-2 bg-slate-50 dark:bg-slate-900 border rounded-lg space-y-1">
+                          <div><span className="font-bold text-slate-500">{language === "en" ? "File:" : "ชื่อไฟล์:"}</span> {meterExcelFileName}</div>
+                          <div><span className="font-bold text-slate-500">{language === "en" ? "Size:" : "ขนาด:"}</span> {meterExcelFileSize}</div>
+                          {meterExcelParseStatus === "PARSING" && (
+                            <div className="text-amber-500 font-bold animate-pulse">⏳ {language === "en" ? "Parsing file..." : "กำลังตรวจสอบไฟล์..."}</div>
+                          )}
+                          {meterExcelParseStatus === "SUCCESS" && (
+                            <div className="text-emerald-500 font-bold">✓ {language === "en" ? "Parsing completed. Ready to preview." : "ตรวจสอบข้อมูลเสร็จสิ้น สามารถดูรายละเอียดด้านล่างได้"}</div>
+                          )}
+                          {meterExcelParseStatus === "ERROR" && (
+                            <div className="text-rose-500 font-bold bg-rose-50 dark:bg-rose-950/20 p-1.5 border border-rose-100 rounded">❌ {meterExcelError}</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center">
-                  <div className="flex bg-slate-100 dark:bg-slate-900 rounded-xl p-1 text-[10px] font-bold flex-wrap gap-0.5">
-                    <button
-                      onClick={() => setExcelFilter("ALL")}
-                      className={`px-3 py-1 rounded ${excelFilter === "ALL" ? "bg-white text-slate-800 shadow" : "text-slate-400"}`}
-                    >
-                      {language === "en" ? "All" : "ทั้งหมด"} ({previewRows.length})
-                    </button>
-                    <button
-                      onClick={() => setExcelFilter("VALID")}
-                      className={`px-3 py-1 rounded ${excelFilter === "VALID" ? "bg-white text-slate-800 shadow" : "text-slate-400"}`}
-                    >
-                      {language === "en" ? "Valid" : "พร้อมนำเข้า"} ({previewRows.filter(r => r.validationStatus === "VALID").length})
-                    </button>
-                    <button
-                      onClick={() => setExcelFilter("WARNING")}
-                      className={`px-3 py-1 rounded ${excelFilter === "WARNING" ? "bg-white text-slate-800 shadow" : "text-slate-400"}`}
-                    >
-                      {language === "en" ? "Warnings" : "ต้องตรวจสอบ"} ({previewRows.filter(r => r.validationStatus === "WARNING").length})
-                    </button>
-                    <button
-                      onClick={() => setExcelFilter("DUPLICATE")}
-                      className={`px-3 py-1 rounded ${excelFilter === "DUPLICATE" ? "bg-white text-slate-800 shadow" : "text-slate-400"}`}
-                    >
-                      {language === "en" ? "Duplicates" : "ซ้ำ"} ({previewRows.filter(r => r.validationStatus === "DUPLICATE").length})
-                    </button>
-                    <button
-                      onClick={() => setExcelFilter("ERROR")}
-                      className={`px-3 py-1 rounded ${excelFilter === "ERROR" ? "bg-white text-slate-800 shadow" : "text-slate-400"}`}
-                    >
-                      {language === "en" ? "Errors" : "ผิดพลาด"} ({previewRows.filter(r => r.validationStatus === "ERROR").length})
-                    </button>
+                {/* Import Results Screen */}
+                {meterImportResult && (
+                  <div className="p-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 text-emerald-800 dark:text-emerald-400 rounded-xl space-y-2 text-xs font-semibold">
+                    <h4 className="font-bold text-sm">🎉 {language === "en" ? "Meter Registry Batch Completed" : "ขึ้นทะเบียนคุมมิเตอร์สำเร็จ"}</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      <div>{language === "en" ? "Total Items:" : "รายการทั้งหมดในไฟล์:"} <span className="font-bold font-mono">{meterImportResult.total ?? 0}</span></div>
+                      <div>{language === "en" ? "Successfully Created:" : "ขึ้นทะเบียนสำเร็จ:"} <span className="font-bold font-mono text-emerald-600">{meterImportResult.imported ?? 0}</span></div>
+                      <div>{language === "en" ? "Errors / Ignored:" : "พบข้อผิดพลาด/ข้ามไป:"} <span className="font-bold font-mono text-rose-600">{(meterImportResult.total ?? 0) - (meterImportResult.imported ?? 0)}</span></div>
+                    </div>
                   </div>
+                )}
 
-                  <button
-                    onClick={handleConfirmImport}
-                    disabled={previewRows.some(r => r.validationStatus === "ERROR" || r.validationStatus === "DUPLICATE") || importing}
-                    className={`px-4 py-2 text-white font-bold rounded-xl text-xs transition shadow ${
-                      previewRows.some(r => r.validationStatus === "ERROR" || r.validationStatus === "DUPLICATE") || importing
-                        ? "bg-slate-350 cursor-not-allowed"
-                        : "bg-[#D4AF37] hover:bg-[#D4AF37]/90"
-                    }`}
-                  >
-                    {importing ? (language === "en" ? "Importing..." : "กำลังนำเข้า...") : `🚀 ${language === "en" ? "Confirm Import batch" : "ยืนยันนำเข้าข้อมูลเข้าคิวรอตรวจ"}`}
-                  </button>
-                </div>
+                {/* Meter Import Preview table */}
+                {meterPreviewRows.length > 0 && (
+                  <div className="space-y-4">
+                    {/* Summary cards */}
+                    <div className="grid grid-cols-3 gap-3 text-xs">
+                      <div className="bg-slate-50 dark:bg-slate-900 border rounded-xl p-3 text-center">
+                        <div className="text-slate-400 font-semibold">{language === "en" ? "Total" : "ทั้งหมด"}</div>
+                        <div className="text-lg font-bold font-mono">{meterPreviewRows.length}</div>
+                      </div>
+                      <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 rounded-xl p-3 text-center">
+                        <div className="text-emerald-500 font-semibold">{language === "en" ? "Valid (Ready)" : "พร้อมนำเข้า"}</div>
+                        <div className="text-lg font-bold font-mono text-emerald-600">{meterPreviewRows.filter(r => r.validationStatus === "VALID").length}</div>
+                      </div>
+                      <div className="bg-rose-50 dark:bg-rose-950/20 border border-rose-100 rounded-xl p-3 text-center">
+                        <div className="text-rose-500 font-semibold">{language === "en" ? "Errors" : "ผิดพลาด"}</div>
+                        <div className="text-lg font-bold font-mono text-rose-600">{meterPreviewRows.filter(r => r.validationStatus === "ERROR").length}</div>
+                      </div>
+                    </div>
 
-                <div className="bg-white dark:bg-slate-800 border rounded-xl overflow-x-auto shadow-sm">
-                  <table className="w-full text-xs text-left">
-                    <thead className="bg-slate-50 dark:bg-slate-900 border-b font-bold text-slate-500">
-                      <tr>
-                        <th className="p-3">{language === "en" ? "Row" : "แถว"}</th>
-                        <th className="p-3">{language === "en" ? "Room" : "เลขห้อง"}</th>
-                        <th className="p-3">{language === "en" ? "Utility" : "ประเภทมิเตอร์"}</th>
-                        <th className="p-3">{language === "en" ? "Meter" : "เลขมิเตอร์"}</th>
-                        <th className="p-3">{language === "en" ? "Previous" : "เลขครั้งก่อน"}</th>
-                        <th className="p-3">{language === "en" ? "Current" : "เลขครั้งใหม่"}</th>
-                        <th className="p-3">{language === "en" ? "Usage" : "หน่วยใช้"}</th>
-                        <th className="p-3">{language === "en" ? "Result" : "ผลตรวจสอบ"}</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y text-slate-700 dark:text-slate-350">
-                      {filteredPreviewRows.map((r, index) => (
-                        <tr key={index} className={`hover:bg-slate-50/50 ${
-                          r.validationStatus === "ERROR" ? "bg-rose-50/30 dark:bg-rose-950/10" :
-                          r.validationStatus === "DUPLICATE" ? "bg-blue-50/30 dark:bg-blue-950/10" :
-                          r.validationStatus === "WARNING" ? "bg-amber-50/30 dark:bg-amber-950/10" : ""
-                        }`}>
-                          <td className="p-3 text-slate-400 font-mono">{r.source_row}</td>
-                          <td className="p-3 font-semibold">{r.room_number}</td>
-                          <td className="p-3">
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                              r.utility_type === "WATER" ? "bg-sky-50 text-sky-600 border border-sky-100" : "bg-yellow-50 text-yellow-600 border border-yellow-100"
+                    <div className="flex justify-between items-center">
+                      <div className="flex bg-slate-100 dark:bg-slate-900 rounded-xl p-1 text-[10px] font-bold flex-wrap gap-0.5">
+                        <button
+                          onClick={() => setMeterExcelFilter("ALL")}
+                          className={`px-3 py-1 rounded ${meterExcelFilter === "ALL" ? "bg-white text-slate-800 shadow" : "text-slate-400"}`}
+                        >
+                          {language === "en" ? "All" : "ทั้งหมด"} ({meterPreviewRows.length})
+                        </button>
+                        <button
+                          onClick={() => setMeterExcelFilter("VALID")}
+                          className={`px-3 py-1 rounded ${meterExcelFilter === "VALID" ? "bg-white text-slate-800 shadow" : "text-slate-400"}`}
+                        >
+                          {language === "en" ? "Ready" : "พร้อมนำเข้า"} ({meterPreviewRows.filter(r => r.validationStatus === "VALID").length})
+                        </button>
+                        <button
+                          onClick={() => setMeterExcelFilter("ERROR")}
+                          className={`px-3 py-1 rounded ${meterExcelFilter === "ERROR" ? "bg-white text-slate-800 shadow" : "text-slate-400"}`}
+                        >
+                          {language === "en" ? "Errors" : "ผิดพลาด"} ({meterPreviewRows.filter(r => r.validationStatus === "ERROR").length})
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={handleConfirmMeterImport}
+                        disabled={meterPreviewRows.some(r => r.validationStatus === "ERROR") || meterImporting}
+                        className={`px-4 py-2 text-white font-bold rounded-xl text-xs transition shadow ${
+                          meterPreviewRows.some(r => r.validationStatus === "ERROR") || meterImporting
+                            ? "bg-slate-355 cursor-not-allowed text-slate-400 bg-slate-100 border border-slate-200"
+                            : "bg-[#D4AF37] hover:bg-[#D4AF37]/90"
+                        }`}
+                      >
+                        {meterImporting ? (language === "en" ? "Importing..." : "กำลังนำเข้า...") : `🚀 ${language === "en" ? "Confirm Registration" : "ยืนยันนำเข้าขึ้นทะเบียน"}`}
+                      </button>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-800 border rounded-xl overflow-x-auto shadow-sm">
+                      <table className="w-full text-xs text-left">
+                        <thead className="bg-slate-50 dark:bg-slate-900 border-b font-bold text-slate-500">
+                          <tr>
+                            <th className="p-3">{language === "en" ? "Row" : "แถว"}</th>
+                            <th className="p-3">{language === "en" ? "Room" : "เลขห้อง"}</th>
+                            <th className="p-3">{language === "en" ? "Utility" : "ประเภท"}</th>
+                            <th className="p-3">{language === "en" ? "Classification" : "ประเภทขึ้นทะเบียน"}</th>
+                            <th className="p-3">{language === "en" ? "Manufacturer Serial" : "เลข Serial ผู้ผลิต"}</th>
+                            <th className="p-3">{language === "en" ? "Installed Date" : "วันที่เริ่มติดตั้ง"}</th>
+                            <th className="p-3">{language === "en" ? "Initial Reading" : "เลขเริ่มตั้งต้น"}</th>
+                            <th className="p-3">{language === "en" ? "Result" : "ผลตรวจสอบ"}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y text-slate-700 dark:text-slate-350">
+                          {filteredMeterPreviewRows.map((r, index) => (
+                            <tr key={index} className={`hover:bg-slate-50/50 ${
+                              r.validationStatus === "ERROR" ? "bg-rose-50/30 dark:bg-rose-950/10" : ""
                             }`}>
-                              {r.utility_type === "WATER" ? (language === "en" ? "Water" : "น้ำ") : (language === "en" ? "Elec" : "ไฟ")}
-                            </span>
-                          </td>
-                          <td className="p-3 font-mono text-[10px]">{r.meter_number || "-"}</td>
-                          <td className="p-3 font-mono">{r.previous_reading}</td>
-                          <td className="p-3 font-mono font-bold">{r.current_reading ?? "-"}</td>
-                          <td className="p-3 font-mono">{r.usage !== null && r.usage !== undefined ? r.usage : "-"}</td>
-                          <td className="p-3 font-bold">
-                            <span className={`px-2 py-0.5 rounded text-[10px] ${
-                              r.validationStatus === "VALID" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
-                              r.validationStatus === "WARNING" ? "bg-amber-50 text-amber-600 border border-amber-100" :
-                              r.validationStatus === "DUPLICATE" ? "bg-blue-50 text-blue-600 border border-blue-100" :
-                              "bg-rose-50 text-rose-600 border border-rose-100"
-                            }`}>
-                              {r.validationStatus === "VALID" ? "✓" : r.validationStatus === "WARNING" ? "⚠" : r.validationStatus === "DUPLICATE" ? "🔁" : "✗"} {r.validationMessage || "OK"}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                              <td className="p-3 text-slate-400 font-mono">{r.source_row}</td>
+                              <td className="p-3 font-semibold">{r.room_number}</td>
+                              <td className="p-3 font-bold text-slate-600">{r.utility_type}</td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                                  r.meter_classification === "LEGACY" ? "bg-indigo-50 text-indigo-600 border border-indigo-100" : "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                                }`}>
+                                  {r.meter_classification}
+                                </span>
+                              </td>
+                              <td className="p-3 font-mono">{r.manufacturer_serial_number || (language === "en" ? "None" : "ไม่มี")}</td>
+                              <td className="p-3">{r.installed_date || (language === "en" ? "None (Legacy)" : "ไม่มี (Legacy)")}</td>
+                              <td className="p-3 font-mono">{Number(r.initial_reading).toLocaleString()}</td>
+                              <td className="p-3 font-bold">
+                                <span className={`px-2 py-0.5 rounded text-[10px] ${
+                                  r.validationStatus === "VALID" ? "bg-emerald-50 text-emerald-600 border border-emerald-100" : "bg-rose-50 text-rose-600 border border-rose-100"
+                                }`}>
+                                  {r.validationStatus === "VALID" ? "✓ OK" : `✗ ${r.validationMessage}`}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1784,6 +2251,12 @@ export default function MeterManagementPage() {
                 {language === "en" ? "Property Meters Registry" : "ทะเบียนคุมมิเตอร์น้ำ/ไฟรายโครงการ"}
               </h3>
               <div className="flex gap-2">
+                <button
+                  onClick={handleExportRegistry}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition text-xs shadow-sm"
+                >
+                  📤 {language === "en" ? "Export Registry" : "ส่งออกทะเบียนมิเตอร์"}
+                </button>
                 <button
                   onClick={() => setShowCoverageInfoPanel(true)}
                   className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white font-bold rounded-xl transition text-xs shadow-sm"
@@ -1867,7 +2340,8 @@ export default function MeterManagementPage() {
                   <tr>
                     <th className="p-3">{language === "en" ? "Room" : "ห้องชุด"}</th>
                     <th className="p-3">{language === "en" ? "Utility Type" : "ประเภท"}</th>
-                    <th className="p-3">{language === "en" ? "Meter Serial" : "เลขซีเรียล"}</th>
+                    <th className="p-3">{language === "en" ? "Internal Meter Code" : "รหัสคุมมิเตอร์"}</th>
+                    <th className="p-3">{language === "en" ? "Manufacturer Serial" : "เลข Serial ผู้ผลิต"}</th>
                     <th className="p-3">{language === "en" ? "Baseline Reading" : "เลขตั้งต้น"}</th>
                     <th className="p-3">{language === "en" ? "Installation Date" : "วันที่เริ่มใช้งาน"}</th>
                     <th className="p-3">{language === "en" ? "Status" : "สถานะ"}</th>
@@ -1886,11 +2360,14 @@ export default function MeterManagementPage() {
                         )}
                       </td>
                       <td className="p-3 font-mono font-bold">{m.meter_number}</td>
+                      <td className="p-3 font-mono">{m.manufacturer_serial_number || (language === "en" ? "No Serial" : "ไม่มีเลข Serial")}</td>
                       <td className="p-3 font-mono">{Number(m.initial_reading).toLocaleString()}</td>
                       <td className="p-3">{formatThaiDate(m.installed_at)}</td>
                       <td className="p-3">
                         <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
-                          m.meter_status === "ACTIVE" ? "bg-emerald-50 text-emerald-600" : "bg-slate-100 text-slate-500"
+                          m.meter_status === "ACTIVE" ? "bg-emerald-50 text-emerald-600" :
+                          m.meter_status === "RETIRED" ? "bg-rose-50 text-rose-600 border border-rose-100" :
+                          "bg-slate-100 text-slate-500"
                         }`}>
                           {m.meter_status}
                         </span>
@@ -1900,10 +2377,11 @@ export default function MeterManagementPage() {
                           <button
                             onClick={() => {
                               setSelectedMeterForReplace(m);
-                              setNewMeterNumber("");
+                              setReplacementManufacturerSerial("");
                               setStartingReading("");
                               setFinalReading("");
                               setReplacementReason("");
+                              setReplacementDate(new Date().toISOString().split("T")[0]);
                             }}
                             className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 border text-slate-600 font-bold rounded text-[10px] shadow"
                           >
@@ -2308,8 +2786,8 @@ export default function MeterManagementPage() {
       {/* Modal: Register Meter */}
       {showCreateMeterModal && (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 max-w-md w-full space-y-4">
-            <h3 className="font-bold text-slate-800 dark:text-white">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 max-w-md w-full space-y-4 shadow-xl border dark:border-slate-700">
+            <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
               🗂️ {language === "en" ? "Register Unit Meter" : "ขึ้นทะเบียนมิเตอร์ใหม่"}
             </h3>
             <form onSubmit={handleCreateMeter} className="space-y-4 text-xs">
@@ -2327,6 +2805,7 @@ export default function MeterManagementPage() {
                   ))}
                 </select>
               </div>
+
               <div className="flex flex-col gap-1.5">
                 <label className="font-semibold text-slate-400">{language === "en" ? "Utility Type" : "ประเภทมิเตอร์"}</label>
                 <select
@@ -2338,34 +2817,89 @@ export default function MeterManagementPage() {
                   <option value="ELECTRICITY">ELECTRICITY</option>
                 </select>
               </div>
+
               <div className="flex flex-col gap-1.5">
-                <label className="font-semibold text-slate-400">{language === "en" ? "Meter Serial Number" : "หมายเลขซีเรียลมิเตอร์"}</label>
+                <label className="font-semibold text-slate-400">{language === "en" ? "Meter Classification" : "ประเภทการขึ้นทะเบียน"}</label>
+                <select
+                  value={newMeterClassification}
+                  onChange={(e) => {
+                    const val = e.target.value as "LEGACY" | "NEW";
+                    setNewMeterClassification(val);
+                    if (val === "NEW") {
+                      setNewMeterInstalledAt(new Date().toISOString().split("T")[0]);
+                    } else {
+                      setNewMeterInstalledAt("");
+                    }
+                  }}
+                  className="p-2 border rounded-xl dark:bg-slate-900 outline-none"
+                >
+                  <option value="LEGACY">{language === "en" ? "LEGACY (Legacy meter installed before IRM)" : "LEGACY (มิเตอร์เดิมของโครงการก่อนระบบ IRM)"}</option>
+                  <option value="NEW">{language === "en" ? "NEW (Replacement or new construction meter)" : "NEW (มิเตอร์สับเปลี่ยนทดแทน หรือมิเตอร์ตึกสร้างใหม่)"}</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="font-semibold text-slate-400">
+                  {language === "en" ? "Manufacturer Serial Number (Optional)" : "เลข Serial ผู้ผลิต (ระบุหรือไม่ก็ได้)"}
+                </label>
                 <input
                   type="text"
-                  value={newMeterSerial}
-                  onChange={(e) => setNewMeterSerial(e.target.value)}
-                  placeholder="e.g. W-10255"
+                  value={newMeterManufacturerSerial}
+                  onChange={(e) => setNewMeterManufacturerSerial(e.target.value)}
+                  placeholder={language === "en" ? "e.g. S123456" : "เช่น S123456"}
                   className="p-2 border rounded-xl dark:bg-slate-900"
-                  required
                 />
               </div>
+
+              {newMeterClassification === "NEW" && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="font-semibold text-slate-400">
+                    {language === "en" ? "Installed Date" : "วันที่เริ่มติดตั้งใช้งาน"}
+                    <span className="text-rose-500 font-bold ml-1">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={newMeterInstalledAt}
+                    onChange={(e) => setNewMeterInstalledAt(e.target.value)}
+                    className="p-2 border rounded-xl dark:bg-slate-900"
+                    required
+                  />
+                </div>
+              )}
+
               <div className="flex flex-col gap-1.5">
-                <label className="font-semibold text-slate-400">{language === "en" ? "Initial Baseline Reading" : "เลขดัชนีมิเตอร์เริ่มต้น"}</label>
+                <label className="font-semibold text-slate-400">{language === "en" ? "Initial Baseline Reading" : "เลขดัชนีเริ่มต้น"}</label>
                 <input
                   type="number"
                   step="0.01"
                   value={newMeterInitialReading}
                   onChange={(e) => setNewMeterInitialReading(e.target.value)}
-                  placeholder="e.g. 150.00"
+                  placeholder="e.g. 0.00"
                   className="p-2 border rounded-xl dark:bg-slate-900 font-mono"
                   required
                 />
               </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="font-semibold text-slate-400">{language === "en" ? "Note (Optional)" : "หมายเหตุ (เพิ่มเติม)"}</label>
+                <input
+                  type="text"
+                  value={newMeterNote}
+                  onChange={(e) => setNewMeterNote(e.target.value)}
+                  placeholder="e.g. Legitimate legacy meter confirmed"
+                  className="p-2 border rounded-xl dark:bg-slate-900"
+                />
+              </div>
+
               {createMeterFormError && <div className="text-rose-500 font-semibold">{createMeterFormError}</div>}
+
               <div className="flex gap-2 justify-end">
                 <button
                   type="button"
-                  onClick={() => setShowCreateMeterModal(false)}
+                  onClick={() => {
+                    setShowCreateMeterModal(false);
+                    setCreateMeterFormError(null);
+                  }}
                   className="px-4 py-2 border rounded-xl"
                 >
                   {language === "en" ? "Cancel" : "ยกเลิก"}
@@ -2385,27 +2919,44 @@ export default function MeterManagementPage() {
       {/* Modal: Replace Meter */}
       {selectedMeterForReplace && (
         <div className="fixed inset-0 bg-black/50 flex justify-center items-center p-4 z-50">
-          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 max-w-md w-full space-y-4">
-            <h3 className="font-bold text-slate-800 dark:text-white">
+          <div className="bg-white dark:bg-slate-800 rounded-xl p-6 max-w-md w-full space-y-4 shadow-xl border dark:border-slate-700">
+            <h3 className="font-bold text-slate-800 dark:text-white flex items-center gap-2">
               🔄 {language === "en" ? "Replace Meter Registry" : "ทำรายการสับเปลี่ยนมิเตอร์"}
             </h3>
             <div className="p-3 bg-amber-50 rounded-xl text-[11px] text-amber-700">
-              <strong>Old Meter:</strong> {selectedMeterForReplace.meter_number} ({selectedMeterForReplace.utility_type})
+              <strong>Old Meter Code:</strong> {selectedMeterForReplace.meter_number} ({selectedMeterForReplace.utility_type})
             </div>
             <form onSubmit={handleReplaceMeter} className="space-y-4 text-xs">
               <div className="flex flex-col gap-1.5">
-                <label className="font-semibold text-slate-400">{language === "en" ? "New Meter Serial Number" : "หมายเลขซีเรียลมิเตอร์ตัวใหม่"}</label>
+                <label className="font-semibold text-slate-400">
+                  {language === "en" ? "Replacement Meter Manufacturer Serial (Optional)" : "เลข Serial ผู้ผลิต (มิเตอร์ตัวใหม่ - ระบุหรือไม่ก็ได้)"}
+                </label>
                 <input
                   type="text"
-                  value={newMeterNumber}
-                  onChange={(e) => setNewMeterNumber(e.target.value)}
-                  placeholder="e.g. W-NEXT-99"
+                  value={replacementManufacturerSerial}
+                  onChange={(e) => setReplacementManufacturerSerial(e.target.value)}
+                  placeholder="e.g. SN-998877"
+                  className="p-2 border rounded-xl dark:bg-slate-900"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="font-semibold text-slate-400">
+                  {language === "en" ? "Replacement Date" : "วันที่เปลี่ยนมิเตอร์"}
+                  <span className="text-rose-500 font-bold ml-1">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={replacementDate}
+                  onChange={(e) => setReplacementDate(e.target.value)}
                   className="p-2 border rounded-xl dark:bg-slate-900"
                   required
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="font-semibold text-slate-400">{language === "en" ? "New Meter Starting Index" : "ตัวเลขเริ่มต้นจดของมิเตอร์ตัวใหม่"}</label>
+                <label className="font-semibold text-slate-400">
+                  {language === "en" ? "New Meter Starting Index" : "ตัวเลขเริ่มต้นจดของมิเตอร์ตัวใหม่"}
+                  <span className="text-rose-500 font-bold ml-1">*</span>
+                </label>
                 <input
                   type="number"
                   step="0.01"
@@ -2417,7 +2968,10 @@ export default function MeterManagementPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="font-semibold text-slate-400">{language === "en" ? "Old Meter Final Reading" : "ตัวเลขจดครั้งสุดท้ายของมิเตอร์ตัวเก่า"}</label>
+                <label className="font-semibold text-slate-400">
+                  {language === "en" ? "Old Meter Final Reading" : "ตัวเลขจดครั้งสุดท้ายของมิเตอร์ตัวเก่า"}
+                  <span className="text-rose-500 font-bold ml-1">*</span>
+                </label>
                 <input
                   type="number"
                   step="0.01"
@@ -2425,6 +2979,7 @@ export default function MeterManagementPage() {
                   onChange={(e) => setFinalReading(e.target.value)}
                   placeholder="e.g. 1250.00"
                   className="p-2 border rounded-xl dark:bg-slate-900 font-mono"
+                  required
                 />
               </div>
               <div className="flex flex-col gap-1.5">
@@ -2441,7 +2996,10 @@ export default function MeterManagementPage() {
               <div className="flex gap-2 justify-end">
                 <button
                   type="button"
-                  onClick={() => setSelectedMeterForReplace(null)}
+                  onClick={() => {
+                    setSelectedMeterForReplace(null);
+                    setReplaceFormError(null);
+                  }}
                   className="px-4 py-2 border rounded-xl"
                 >
                   {language === "en" ? "Cancel" : "ยกเลิก"}

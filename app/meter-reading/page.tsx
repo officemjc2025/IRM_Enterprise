@@ -510,7 +510,12 @@ export default function MeterReadingPage() {
                     <div className="flex justify-between items-center">
                       <div>
                         <strong className="text-sm text-slate-800 dark:text-white">Room {r.unit?.unit_number}</strong>
-                        <span className="text-[10px] text-slate-400 block font-mono">Serial: {r.meter?.meter_number}</span>
+                        <span className="text-[10px] text-slate-400 block font-mono">
+                          {language === "en" ? "Code: " : "รหัสคุม: "} {r.meter?.meter_number}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block font-mono">
+                          {language === "en" ? "Serial: " : "เลข Serial ผู้ผลิต: "} {r.meter?.manufacturer_serial_number || (language === "en" ? "No Manufacturer Serial" : "ไม่มีเลข Serial ผู้ผลิต")}
+                        </span>
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         {r.utility_type === "WATER" ? (
@@ -602,7 +607,11 @@ export default function MeterReadingPage() {
             <div className="space-y-1 text-xs text-slate-500">
               <div><strong>{language === "en" ? "Room:" : "ห้องชุด:"}</strong> Room {selectedReading.unit?.unit_number}</div>
               <div><strong>{language === "en" ? "Utility Type:" : "ประเภทมิเตอร์:"}</strong> {selectedReading.utility_type}</div>
-              <div><strong>{language === "en" ? "Meter Serial:" : "เลขมิเตอร์:"}</strong> {selectedReading.meter?.meter_number}</div>
+              <div><strong>{language === "en" ? "Meter Code:" : "รหัสคุมมิเตอร์:"}</strong> {selectedReading.meter?.meter_number}</div>
+              <div>
+                <strong>{language === "en" ? "Manufacturer Serial:" : "เลข Serial ผู้ผลิต:"}</strong>{" "}
+                {selectedReading.meter?.manufacturer_serial_number || (language === "en" ? "No Manufacturer Serial" : "ไม่มีเลข Serial ผู้ผลิต")}
+              </div>
               <div><strong>{language === "en" ? "Previous index:" : "ดัชนีจดครั้งก่อน:"}</strong> <span className="font-mono">{Number(selectedReading.previous_reading).toLocaleString()}</span></div>
               {selectedReading.unit && (
                 <div className="mt-1">
