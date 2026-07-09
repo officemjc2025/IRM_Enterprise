@@ -16,7 +16,7 @@ interface OwnershipDbRow {
   id: string;
   person_id: string;
   unit_id: string;
-  ownership_percentage: number;
+  ownership_percent: number;
   ownership_type: string;
   start_date: string;
   end_date: string | null;
@@ -32,7 +32,7 @@ function mapToOwnership(row: OwnershipDbRow): Ownership {
     id: row.id,
     person_id: row.person_id,
     unit_id: row.unit_id,
-    ownership_percentage: Number(row.ownership_percentage),
+    ownership_percentage: Number(row.ownership_percent),
     ownership_type: row.ownership_type,
     start_date: row.start_date,
     end_date: row.end_date,
@@ -53,7 +53,7 @@ function mapToOwnership(row: OwnershipDbRow): Ownership {
 export async function findAll(): Promise<Ownership[]> {
   const supabase = await getSupabase();
   const { data, error } = await supabase
-    .from("ownership")
+    .from("owner_assignments")
     .select("*, person:persons(*), unit:units(*)")
     .is("deleted_at", null);
 
@@ -62,13 +62,13 @@ export async function findAll(): Promise<Ownership[]> {
     return [];
   }
 
-  return (data as OwnershipDbRow[] || []).map(mapToOwnership);
+  return (data as unknown as OwnershipDbRow[] || []).map(mapToOwnership);
 }
 
 export async function findById(id: string): Promise<Ownership | null> {
   const supabase = await getSupabase();
   const { data, error } = await supabase
-    .from("ownership")
+    .from("owner_assignments")
     .select("*, person:persons(*), unit:units(*)")
     .eq("id", id)
     .is("deleted_at", null)
@@ -79,7 +79,7 @@ export async function findById(id: string): Promise<Ownership | null> {
     return null;
   }
 
-  return mapToOwnership(data as OwnershipDbRow);
+  return mapToOwnership(data as unknown as OwnershipDbRow);
 }
 
 export async function create(dto: CreateOwnershipDto): Promise<Ownership> {
@@ -87,7 +87,7 @@ export async function create(dto: CreateOwnershipDto): Promise<Ownership> {
   const payload = {
     person_id: dto.person_id,
     unit_id: dto.unit_id,
-    ownership_percentage: dto.ownership_percentage,
+    ownership_percent: dto.ownership_percentage,
     ownership_type: dto.ownership_type,
     start_date: dto.start_date,
     end_date: dto.end_date || null,
@@ -95,7 +95,7 @@ export async function create(dto: CreateOwnershipDto): Promise<Ownership> {
   };
 
   const { data, error } = await supabase
-    .from("ownership")
+    .from("owner_assignments")
     .insert([payload])
     .select("*, person:persons(*), unit:units(*)")
     .single();
@@ -104,7 +104,7 @@ export async function create(dto: CreateOwnershipDto): Promise<Ownership> {
     throw new Error(`Failed to create ownership: ${error.message}`);
   }
 
-  return mapToOwnership(data as OwnershipDbRow);
+  return mapToOwnership(data as unknown as OwnershipDbRow);
 }
 
 export async function update(id: string, dto: UpdateOwnershipDto): Promise<Ownership | null> {
@@ -112,7 +112,7 @@ export async function update(id: string, dto: UpdateOwnershipDto): Promise<Owner
   const payload: Partial<{
     person_id: string;
     unit_id: string;
-    ownership_percentage: number;
+    ownership_percent: number;
     ownership_type: string;
     start_date: string;
     end_date: string | null;
@@ -122,7 +122,7 @@ export async function update(id: string, dto: UpdateOwnershipDto): Promise<Owner
 
   if (dto.person_id !== undefined) payload.person_id = dto.person_id;
   if (dto.unit_id !== undefined) payload.unit_id = dto.unit_id;
-  if (dto.ownership_percentage !== undefined) payload.ownership_percentage = dto.ownership_percentage;
+  if (dto.ownership_percentage !== undefined) payload.ownership_percent = dto.ownership_percentage;
   if (dto.ownership_type !== undefined) payload.ownership_type = dto.ownership_type;
   if (dto.start_date !== undefined) payload.start_date = dto.start_date;
   if (dto.end_date !== undefined) payload.end_date = dto.end_date;
@@ -130,7 +130,7 @@ export async function update(id: string, dto: UpdateOwnershipDto): Promise<Owner
   payload.updated_at = new Date().toISOString();
 
   const { data, error } = await supabase
-    .from("ownership")
+    .from("owner_assignments")
     .update(payload)
     .eq("id", id)
     .select("*, person:persons(*), unit:units(*)")
@@ -141,13 +141,13 @@ export async function update(id: string, dto: UpdateOwnershipDto): Promise<Owner
     return null;
   }
 
-  return mapToOwnership(data as OwnershipDbRow);
+  return mapToOwnership(data as unknown as OwnershipDbRow);
 }
 
 export async function archive(id: string): Promise<boolean> {
   const supabase = await getSupabase();
   const { error } = await supabase
-    .from("ownership")
+    .from("owner_assignments")
     .update({
       deleted_at: new Date().toISOString(),
       status: "INACTIVE"
@@ -165,7 +165,7 @@ export async function archive(id: string): Promise<boolean> {
 export async function findDuplicate(personId: string, unitId: string): Promise<Ownership | null> {
   const supabase = await getSupabase();
   const { data, error } = await supabase
-    .from("ownership")
+    .from("owner_assignments")
     .select("*, person:persons(*), unit:units(*)")
     .eq("person_id", personId)
     .eq("unit_id", unitId)
@@ -178,5 +178,5 @@ export async function findDuplicate(personId: string, unitId: string): Promise<O
     return null;
   }
 
-  return data ? mapToOwnership(data as OwnershipDbRow) : null;
+  return data ? mapToOwnership(data as unknown as OwnershipDbRow) : null;
 }

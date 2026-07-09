@@ -46,8 +46,10 @@ export function useImport() {
   const [parsedData, setParsedData] = useState<{ headers: string[]; rows: Record<string, unknown>[] } | null>(null);
   const [columnMapping, setColumnMapping] = useState<ColumnMapping>({});
   const [rowValidation, setRowValidation] = useState<ValidationResult | null>(null);
-  const [importResult, setImportResult] = useState<ImportResponse | null>(null);
+  const [importResult, setImportResult] = useState<ImportResponse & { isDryRun?: boolean } | null>(null);
   const [importProgress, setImportProgress] = useState<string | null>(null);
+  const [importStrategy, setImportStrategy] = useState<string>("dry_run");
+  const [duplicateResolution, setDuplicateResolution] = useState<string>("update");
   const router = useRouter();
 
   // Fetch properties on mount using supabase client
@@ -86,7 +88,7 @@ export function useImport() {
 
   const handleFileSelect = (rawFile: File) => {
     // Selection is required before Import / File Select
-    if (selectedModule === "unit" && !selectedPropertyId) {
+    if (["unit", "occupancy", "owner_relationship", "combined_metro"].includes(selectedModule) && !selectedPropertyId) {
       setError("propertyRequired");
       return;
     }
@@ -131,7 +133,7 @@ export function useImport() {
       setError("fileRequired");
       return;
     }
-    if ((selectedModule === "unit" || selectedModule === "occupancy") && !selectedPropertyId) {
+    if (["unit", "occupancy", "owner_relationship", "combined_metro"].includes(selectedModule) && !selectedPropertyId) {
       setError("propertyRequired");
       return;
     }
@@ -157,7 +159,7 @@ export function useImport() {
           parsed.rows,
           mapping,
           schema,
-          (selectedModule === "unit" || selectedModule === "occupancy") ? selectedPropertyId : undefined
+          ["unit", "occupancy", "owner_relationship", "combined_metro"].includes(selectedModule) ? selectedPropertyId : undefined
         );
         setRowValidation(validated);
       }
@@ -179,7 +181,7 @@ export function useImport() {
         parsedData.rows,
         newMapping,
         schema,
-        selectedModule === "unit" ? selectedPropertyId : undefined
+        ["unit", "occupancy", "owner_relationship", "combined_metro"].includes(selectedModule) ? selectedPropertyId : undefined
       );
       setRowValidation(validated);
     }
@@ -207,7 +209,7 @@ export function useImport() {
       // 3. Saving
       setImportProgress("Saving...");
       const payload = rowValidation.results.map((r) => r.normalizedData);
-      const res = await importService.commit(payload, selectedModule);
+      const res = await importService.commit(payload, selectedModule, importStrategy, duplicateResolution);
 
       // 4. Finishing
       setImportProgress("Finishing...");
@@ -215,12 +217,19 @@ export function useImport() {
 
       setImportResult(res);
       if (res.success) {
+        if (res.isDryRun) {
+          // Keep step and UI state for dry run review
+          return;
+        }
+
         // Refresh API cache and current router to ensure new data is retrieved immediately
         try {
           let apiPath = "/api/v1/units";
           if (selectedModule === "person") apiPath = "/api/v1/persons";
           else if (selectedModule === "owner") apiPath = "/api/v1/owners";
           else if (selectedModule === "occupancy") apiPath = "/api/v1/occupancies";
+          else if (selectedModule === "owner_relationship") apiPath = "/api/v1/ownerships";
+          else if (selectedModule === "combined_metro") apiPath = "/api/v1/units";
           await fetch(apiPath, { cache: "no-store" });
         } catch (fetchErr) {
           console.error(`Failed to refresh ${selectedModule} cache:`, fetchErr);
@@ -233,6 +242,8 @@ export function useImport() {
           if (selectedModule === "person") targetPath = "/persons";
           else if (selectedModule === "owner") targetPath = "/owners";
           else if (selectedModule === "occupancy") targetPath = "/occupancies";
+          else if (selectedModule === "owner_relationship") targetPath = "/ownerships";
+          else if (selectedModule === "combined_metro") targetPath = "/units";
           router.push(targetPath);
         }, 4000);
       } else {
@@ -279,6 +290,10 @@ export function useImport() {
     rowValidation,
     importResult,
     importProgress,
+    importStrategy,
+    setImportStrategy,
+    duplicateResolution,
+    setDuplicateResolution,
     handleFileSelect,
     runFileValidation,
     updateMappingAndRevalidate,

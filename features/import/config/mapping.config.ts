@@ -1,0 +1,31 @@
+import { CanonicalField } from "../types/import.types";
+
+export const MAPPING_CONFIG: Record<CanonicalField, string[]> = {
+  property_code: ["property_code", "propertycode", "property_id", "propertyid"],
+  property_name: ["property_name", "propertyname", "property"],
+  building_code: ["building_code", "buildingcode", "building", "block"],
+  floor: ["floor", "level", "storey"],
+  unit_number: ["room_no", "roomno", "room", "unit", "unitno", "unitnumber", "room_number"],
+  area: ["area", "size", "sqm", "sq_m", "square_meters"],
+  ownership_ratio: ["ratio", "ownershipratio", "ownership_ratio", "share", "shares"],
+  remark: ["roomid", "remark", "note", "comment", "remarks"],
+  full_name: ["full_name", "fullname", "name"],
+  display_name: ["display_name", "displayname"],
+  phone: ["phone", "tel", "telephone", "mobile", "phone_number"],
+  email: ["email", "mail", "email_address"],
+  passport_no: ["passport", "passport_no", "passport_number"],
+  national_id: ["national_id", "id_card", "national_id_card"],
+  owner_code: ["owner_code", "ownercode"],
+  owner_name: ["owner_name", "ownername"],
+  owner_type: ["owner_type", "ownertype"],
+  person_code: ["person_code", "personcode"],
+  person_type: ["person_type", "persontype"],
+  occupancy_type: ["occupancy_type", "occupancytype", "status"],
+  move_in_date: ["move_in", "move_in_date", "start_date"],
+  move_out_date: ["move_out", "move_out_date", "end_date"],
+  primary_resident: ["primary_resident", "is_primary"],
+  status: ["active", "state"],
+  water_meter: ["water_meter", "watermeter", "water_meter_no", "water_meter_number", "water_no", "water_code", "water_meter_serial"],
+  electricity_meter: ["electricity_meter", "electricitymeter", "electricity_meter_no", "electricity_meter_number", "electricity_no", "electric_meter", "electric_no", "electricity_meter_serial"],
+  resident_name: ["resident", "resident_name", "residentname", "occupant", "occupant_name"]
+};

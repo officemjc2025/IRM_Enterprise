@@ -1,4 +1,5 @@
 import { Status } from "@/shared/enums/status";
+import { UnitOperationalStatus } from "@/shared/enums/unit-operational-status";
 
 export interface Unit {
   id: string;
@@ -9,6 +10,8 @@ export interface Unit {
   area: number;
   ownership_ratio: number;
   status: Status;
+  // Canonical operational state — authoritative single field
+  operational_status: UnitOperationalStatus;
   created_at: string;
   updated_at: string;
   created_by?: string | null;
@@ -23,6 +26,7 @@ export interface CreateUnitDto {
   area: number;
   ownership_ratio: number;
   status?: Status;
+  operational_status?: UnitOperationalStatus;
 }
 
 export interface UpdateUnitDto {
@@ -33,4 +37,7 @@ export interface UpdateUnitDto {
   area?: number;
   ownership_ratio?: number;
   status?: Status;
+  // May only be set via /api/v1/units/:id/status (lifecycle service)
+  operational_status?: UnitOperationalStatus;
 }
+

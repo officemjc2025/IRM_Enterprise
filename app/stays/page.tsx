@@ -6,7 +6,7 @@ import { useLanguage } from "@/providers/LanguageProvider";
 import { PageHeader, LoadingState, EmptyState } from "@/shared/ui";
 import { createClient } from "@/lib/supabase/client";
 import { Reservation } from "@/features/reservation/types/reservation.types";
-import { StayChargePeriod, OverallStatus, RentStatus, UtilityStatus, deriveStayAttention } from "@/features/reservation/types/stay.types";
+import { StayChargePeriod, OverallStatus, RentStatus, UtilityStatus, deriveStayAttention, MeterReading } from "@/features/reservation/types/stay.types";
 import { 
   formatDate, 
   formatMonthYear, 
@@ -56,6 +56,8 @@ function StaysContent() {
   const [loadingPeriods, setLoadingPeriods] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<StayChargePeriod | null>(null);
   const [timelineFilter, setTimelineFilter] = useState<"ALL" | "OUTSTANDING">("ALL");
+  const [stayReadings, setStayReadings] = useState<MeterReading[]>([]);
+  const [utilityError, setUtilityError] = useState<string | null>(null);
 
   // Period Update Form States
   const [waterVal, setWaterVal] = useState("");
@@ -333,11 +335,105 @@ function StaysContent() {
     }
   };
 
+  const fetchStayReadings = async (unitId: string) => {
+    setUtilityError(null);
+    try {
+      const res = await fetch(`/api/v1/meter-readings?unit_id=${unitId}`);
+      if (!res.ok) {
+        if (res.status === 503) {
+          const json = await res.json();
+          if (json.code === "UTILITY_INFRASTRUCTURE_NOT_READY") {
+            setUtilityError(language === "en" ? "Meter data is not yet available" : "ข้อมูลมิเตอร์ยังไม่พร้อมใช้งาน");
+            return;
+          }
+        }
+        throw new Error(`HTTP error ${res.status}`);
+      }
+
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error("Response is not JSON");
+      }
+
+      const json = await res.json();
+      if (json.success) {
+        setStayReadings(json.data || []);
+      }
+    } catch (err) {
+      console.error("Error fetching stay readings:", err);
+    }
+  };
+
+  const renderUtilityDetail = (type: "WATER" | "ELECTRICITY", currentP: StayChargePeriod) => {
+    const billingMonth = currentP.period_start.slice(0, 7);
+    const reading = stayReadings.find(r => r.utility_type === type && r.cycle?.billing_month === billingMonth);
+
+    const typeLabel = type === "WATER" ? (language === "en" ? "Water" : "ค่าน้ำ") : (language === "en" ? "Electricity" : "ค่าไฟ");
+
+    if (utilityError) {
+      return (
+        <div className="p-2.5 bg-amber-50 dark:bg-amber-955/20 border border-amber-250 dark:border-amber-800/40 text-[11px] text-amber-850 dark:text-amber-400 rounded-lg space-y-0.5 font-semibold flex flex-col justify-between">
+          <strong className="block text-slate-800 dark:text-slate-100">{typeLabel}</strong>
+          <div>⚠️ {utilityError}</div>
+        </div>
+      );
+    }
+
+    if (!reading) {
+      return (
+        <div className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-0.5 border dark:border-slate-700 text-[11px] text-slate-500">
+          <strong className="block text-slate-700 dark:text-slate-250">{typeLabel}</strong>
+          <div>{language === "en" ? "Status: Pending Reading" : "สถานะ: รอจดมิเตอร์"}</div>
+        </div>
+      );
+    }
+
+    if (reading.status !== "APPROVED") {
+      let statusLabel = "";
+      if (reading.status === "PENDING") {
+        statusLabel = language === "en" ? "Pending Reading" : "รอจดมิเตอร์";
+      } else if (reading.status === "REVIEW") {
+        statusLabel = reading.anomaly_status !== "NORMAL"
+          ? (language === "en" ? "Anomaly Detected - Review Required" : "พบความผิดปกติ - รอตรวจสอบ")
+          : (language === "en" ? "Pending Approval" : "รออนุมัติ");
+      } else if (reading.status === "REJECTED") {
+        statusLabel = language === "en" ? "Correction Required" : "ส่งกลับแก้ไข";
+      }
+
+      return (
+        <div className="p-2.5 bg-amber-50/50 dark:bg-amber-955/20 rounded-lg space-y-0.5 border border-amber-200/50 text-[11px] text-amber-800 dark:text-amber-400">
+          <strong className="block text-slate-700 dark:text-slate-250">{typeLabel}</strong>
+          <div>{language === "en" ? "Status:" : "สถานะ:"} <span className="font-bold">{statusLabel}</span></div>
+          {reading.anomaly_reason && (
+            <div className="text-[10px] text-rose-600 dark:text-rose-455 font-semibold">⚠️ {reading.anomaly_reason}</div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="p-2.5 bg-emerald-50/30 dark:bg-emerald-955/10 rounded-lg space-y-0.5 border border-emerald-200/40 text-[11px] text-slate-700 dark:text-slate-300">
+        <strong className="block text-slate-800 dark:text-slate-100">{typeLabel}</strong>
+        <div className="grid grid-cols-1 gap-y-0.5 font-mono text-[10px]">
+          <div>{language === "en" ? "Prev:" : "เลขครั้งก่อน:"} {Number(reading.previous_reading).toLocaleString()}</div>
+          <div>{language === "en" ? "Current:" : "เลขปัจจุบัน:"} {Number(reading.current_reading).toLocaleString()}</div>
+          <div>{language === "en" ? "Usage:" : "ใช้:"} {Number(reading.usage_units).toLocaleString()} {language === "en" ? "units" : "หน่วย"}</div>
+          <div>{language === "en" ? "Rate:" : "อัตรา:"} {Number(reading.rate_per_unit_snapshot).toFixed(2)} {language === "en" ? "THB/unit" : "บาท/หน่วย"}</div>
+        </div>
+        <div className="border-t border-slate-200 dark:border-slate-700 pt-1 mt-1 flex justify-between font-bold text-[11px]">
+          <span>{language === "en" ? "Total:" : "รวม:"} {Number(reading.calculated_amount).toFixed(2)} ฿</span>
+          <span className="text-emerald-600 dark:text-emerald-455">{language === "en" ? "Approved" : "อนุมัติแล้ว"}</span>
+        </div>
+      </div>
+    );
+  };
+
   const openStayDetails = (stay: Reservation) => {
     setSelectedStay(stay);
     setSelectedPeriod(null);
     setTimelineFilter("ALL");
     fetchStayPeriods(stay.id);
+    fetchStayReadings(stay.unit_id);
   };
 
   const openPeriodEditWithFocus = (p: StayChargePeriod, focusField: "WATER" | "PAID" | null) => {
@@ -859,19 +955,13 @@ function StaysContent() {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-2 text-xs">
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">{language === "en" ? "Rent" : "ค่าห้อง"}</span>
-                        <strong className="font-mono text-slate-800 dark:text-slate-200">{currentP.rent_amount.toLocaleString()} ฿</strong>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                      <div className="p-2.5 bg-slate-50 dark:bg-slate-900 rounded-lg space-y-0.5 border dark:border-slate-700">
+                        <span className="text-slate-450 block text-[10px]">{language === "en" ? "Rent" : "ค่าห้อง"}</span>
+                        <strong className="font-mono text-sm text-slate-800 dark:text-slate-200">{currentP.rent_amount.toLocaleString()} ฿</strong>
                       </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">{language === "en" ? "Water" : "ค่าน้ำ"}</span>
-                        <strong className="font-mono text-slate-800 dark:text-slate-200">{currentP.water_amount !== null ? currentP.water_amount.toLocaleString() + " ฿" : (language === "en" ? "Pending" : "ยังไม่บันทึก")}</strong>
-                      </div>
-                      <div>
-                        <span className="text-slate-400 block text-[10px]">{language === "en" ? "Electricity" : "ค่าไฟ"}</span>
-                        <strong className="font-mono text-slate-800 dark:text-slate-200">{currentP.electricity_amount !== null ? currentP.electricity_amount.toLocaleString() + " ฿" : (language === "en" ? "Pending" : "ยังไม่บันทึก")}</strong>
-                      </div>
+                      {renderUtilityDetail("WATER", currentP)}
+                      {renderUtilityDetail("ELECTRICITY", currentP)}
                     </div>
 
                     <div className="grid grid-cols-3 gap-2 text-xs pt-1.5 border-t border-slate-100 dark:border-slate-700 font-mono">

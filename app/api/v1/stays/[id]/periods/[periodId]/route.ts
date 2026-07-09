@@ -47,11 +47,81 @@ export async function PATCH(request: Request, { params }: Params) {
     const body = await request.json();
     const updateData: Record<string, unknown> = {};
 
-    // Map fields
-    if (body.water_amount !== undefined) updateData.water_amount = body.water_amount ? parseFloat(body.water_amount) : null;
+    // Manual Correction Policy Guards
+    if (body.water_amount !== undefined) {
+      const { data: approvedWaterReading } = await supabase
+        .from("meter_readings")
+        .select("id, calculated_amount")
+        .eq("unit_id", currentPeriod.unit_id)
+        .eq("utility_type", "WATER")
+        .eq("status", "APPROVED")
+        .eq("sync_status", "SYNCED")
+        .eq("linked_stay_charge_period_id", periodId)
+        .limit(1)
+        .maybeSingle();
+
+      if (approvedWaterReading) {
+        if (!body.correction_reason) {
+          return NextResponse.json({
+            success: false,
+            message: "Modification of approved meter-derived water charge requires a correction reason."
+          }, { status: 400 });
+        }
+
+        await supabase.rpc("log_entity_change", {
+          p_entity_type: "meter_readings",
+          p_entity_id: approvedWaterReading.id,
+          p_action_type: "EDIT",
+          p_changed_fields: {
+            action: "MANUAL_CORRECTION",
+            field: "water_amount",
+            original_value: approvedWaterReading.calculated_amount,
+            corrected_value: body.water_amount,
+            reason: body.correction_reason
+          },
+          p_reason: body.correction_reason
+        });
+      }
+      updateData.water_amount = body.water_amount ? parseFloat(body.water_amount) : null;
+    }
     if (body.water_status !== undefined) updateData.water_status = body.water_status;
     
-    if (body.electricity_amount !== undefined) updateData.electricity_amount = body.electricity_amount ? parseFloat(body.electricity_amount) : null;
+    if (body.electricity_amount !== undefined) {
+      const { data: approvedElecReading } = await supabase
+        .from("meter_readings")
+        .select("id, calculated_amount")
+        .eq("unit_id", currentPeriod.unit_id)
+        .eq("utility_type", "ELECTRICITY")
+        .eq("status", "APPROVED")
+        .eq("sync_status", "SYNCED")
+        .eq("linked_stay_charge_period_id", periodId)
+        .limit(1)
+        .maybeSingle();
+
+      if (approvedElecReading) {
+        if (!body.correction_reason) {
+          return NextResponse.json({
+            success: false,
+            message: "Modification of approved meter-derived electricity charge requires a correction reason."
+          }, { status: 400 });
+        }
+
+        await supabase.rpc("log_entity_change", {
+          p_entity_type: "meter_readings",
+          p_entity_id: approvedElecReading.id,
+          p_action_type: "EDIT",
+          p_changed_fields: {
+            action: "MANUAL_CORRECTION",
+            field: "electricity_amount",
+            original_value: approvedElecReading.calculated_amount,
+            corrected_value: body.electricity_amount,
+            reason: body.correction_reason
+          },
+          p_reason: body.correction_reason
+        });
+      }
+      updateData.electricity_amount = body.electricity_amount ? parseFloat(body.electricity_amount) : null;
+    }
     if (body.electricity_status !== undefined) updateData.electricity_status = body.electricity_status;
     
     if (body.rent_status !== undefined) updateData.rent_status = body.rent_status;

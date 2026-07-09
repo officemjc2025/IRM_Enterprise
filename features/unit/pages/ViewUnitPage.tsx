@@ -8,6 +8,7 @@ import { Occupancy } from "@/features/occupancy/types/occupancy.types";
 import { ResidentAssignment } from "@/features/resident-assignment/types/resident-assignment.types";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { PageHeader } from "@/shared/ui";
+import { formatOwnershipRatio } from "@/shared/utils/unit";
 
 interface ViewUnitProps {
   params: Promise<{ id: string }>;
@@ -131,7 +132,7 @@ export default function ViewUnitPage({ params }: ViewUnitProps) {
                   </div>
                   <div className="space-y-1">
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">{t.unit.ownershipRatio}</span>
-                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{(unit.ownership_ratio * 100).toFixed(4)}%</span>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{formatOwnershipRatio(unit.ownership_ratio)}</span>
                   </div>
                   <div className="space-y-1">
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">{t.common.status}</span>

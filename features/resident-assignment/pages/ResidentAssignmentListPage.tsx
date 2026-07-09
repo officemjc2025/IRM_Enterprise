@@ -8,6 +8,7 @@ import { useLanguage } from "@/providers/LanguageProvider";
 import { useDebounce, usePagination, useSorting, useFilter } from "@/features/unit/hooks";
 import { PageHeader, SearchInput, EmptyState, LoadingState } from "@/shared/ui";
 import { Unit } from "@/features/unit/types/unit.types";
+import { compareUnitNumbers } from "@/shared/utils/unit";
 
 interface UnitWithProperties extends Unit {
   properties?: {
@@ -100,13 +101,15 @@ function ResidentAssignmentListInner() {
 
   // 3. Sort Step
   const sortedAssignments = [...filteredAssignments].sort((a, b) => {
+    if (sortBy === "unit_id") {
+      const cmp = compareUnitNumbers(a.unit?.unit_number, b.unit?.unit_number);
+      return sortOrder === "asc" ? cmp : -cmp;
+    }
+
     let valA: unknown = "";
     let valB: unknown = "";
 
-    if (sortBy === "unit_id") {
-      valA = a.unit?.unit_number || "";
-      valB = b.unit?.unit_number || "";
-    } else if (sortBy === "person_id") {
+    if (sortBy === "person_id") {
       valA = a.person?.display_name || `${a.person?.first_name || ""} ${a.person?.last_name || ""}`;
       valB = b.person?.display_name || `${b.person?.first_name || ""} ${b.person?.last_name || ""}`;
     } else if (sortBy === "occupancy_type") {

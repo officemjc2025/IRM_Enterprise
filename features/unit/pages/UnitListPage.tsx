@@ -3,20 +3,33 @@
 import React, { Suspense, useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Unit } from "../types/unit.types";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { useDebounce, usePagination, useSorting, useFilter } from "../hooks";
 import { PageHeader, SearchInput, EmptyState, LoadingState } from "@/shared/ui";
+import {
+  UnitOperationalStatus,
+  UNIT_OPERATIONAL_STATUSES,
+  STATUS_COLOR,
+  STATUS_LABEL_EN,
+  STATUS_LABEL_TH,
+  STATUS_ICON,
+} from "@/shared/enums/unit-operational-status";
+import { compareUnitNumbers, formatOwnershipRatio } from "@/shared/utils/unit";
 
 function UnitListInner() {
   const { t, language } = useLanguage();
+  const searchParams = useSearchParams();
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   const { sortBy, sortOrder, setSorting } = useSorting("unit_number", "asc");
-  const { status, setFilter } = useFilter("all");
+  // Support ?op_status= deep-link from dashboard cards
+  const initialOpStatus = searchParams.get("op_status") || "all";
+  const { status: opStatus, setFilter: setOpFilter } = useFilter(initialOpStatus);
 
   const fetchUnits = async () => {
     try {
@@ -62,14 +75,19 @@ function UnitListInner() {
     );
   });
 
-  // 2. Status Filter Step
+  // 2. Operational Status Filter Step
   const filteredUnits = searchedUnits.filter((u) => {
-    if (status === "all") return true;
-    return u.status.toUpperCase() === status.toUpperCase();
+    if (opStatus === "all") return true;
+    return (u.operational_status || "VACANT").toUpperCase() === opStatus.toUpperCase();
   });
 
   // 3. Sort Step
   const sortedUnits = [...filteredUnits].sort((a, b) => {
+    if (sortBy === "unit_number") {
+      const cmp = compareUnitNumbers(a.unit_number, b.unit_number);
+      return sortOrder === "asc" ? cmp : -cmp;
+    }
+
     const valA = a[sortBy as keyof Unit] ?? "";
     const valB = b[sortBy as keyof Unit] ?? "";
 
@@ -137,15 +155,18 @@ function UnitListInner() {
               onChange={setSearchTerm}
             />
           </div>
-          <div className="sm:w-48">
+          <div className="sm:w-56">
             <select
-              value={status}
-              onChange={(e) => setFilter(e.target.value)}
+              value={opStatus}
+              onChange={(e) => setOpFilter(e.target.value)}
               className="w-full h-full p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm shadow-sm outline-none cursor-pointer"
             >
               <option value="all">{language === "en" ? "All Statuses" : "ทุกสถานะ"}</option>
-              <option value="ACTIVE">{language === "en" ? "Active" : "ใช้งานอยู่"}</option>
-              <option value="INACTIVE">{language === "en" ? "Inactive" : "ไม่ได้ใช้งาน"}</option>
+              {UNIT_OPERATIONAL_STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_ICON[s]} {language === "en" ? STATUS_LABEL_EN[s] : STATUS_LABEL_TH[s]}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -177,13 +198,18 @@ function UnitListInner() {
                     <td className="p-4">{u.building_code || "-"}</td>
                     <td className="p-4">{u.floor}</td>
                     <td className="p-4">{u.area} sqm</td>
-                    <td className="p-4">{(u.ownership_ratio * 100).toFixed(4)}%</td>
+                    <td className="p-4">{formatOwnershipRatio(u.ownership_ratio)}</td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        u.status === "ACTIVE" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                      }`}>
-                        {u.status}
-                      </span>
+                      {(() => {
+                        const opSt = (u.operational_status || "VACANT") as UnitOperationalStatus;
+                        const colors = STATUS_COLOR[opSt] || STATUS_COLOR.VACANT;
+                        return (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${colors.badge}`}>
+                            <span>{STATUS_ICON[opSt]}</span>
+                            <span>{language === "en" ? STATUS_LABEL_EN[opSt] : STATUS_LABEL_TH[opSt]}</span>
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="p-4 text-right space-x-2">
                       <Link

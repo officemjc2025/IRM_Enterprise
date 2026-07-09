@@ -2,6 +2,8 @@ import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { Unit, CreateUnitDto, UpdateUnitDto } from "@/features/unit/types/unit.types";
 import { Status } from "@/shared/enums/status";
+import { UnitOperationalStatus } from "@/shared/enums/unit-operational-status";
+import { compareUnitNumbers } from "@/shared/utils/unit";
 
 async function getSupabase() {
   if (typeof window === "undefined") {
@@ -19,6 +21,7 @@ interface UnitDbRow {
   area: number;
   ownership_ratio: number;
   status: string | null;
+  operational_status: string | null;
   created_at: string;
   updated_at: string;
   created_by?: string | null;
@@ -35,6 +38,7 @@ function mapToUnit(row: UnitDbRow): Unit {
     area: Number(row.area),
     ownership_ratio: Number(row.ownership_ratio),
     status: (row.status || "ACTIVE").toUpperCase() as Status,
+    operational_status: (row.operational_status || "VACANT").toUpperCase() as UnitOperationalStatus,
     created_at: row.created_at,
     updated_at: row.updated_at,
     created_by: row.created_by,
@@ -54,7 +58,8 @@ export async function findAll(): Promise<Unit[]> {
     return [];
   }
 
-  return (data as UnitDbRow[] || []).map(mapToUnit);
+  const units = (data as UnitDbRow[] || []).map(mapToUnit);
+  return units.sort((a, b) => compareUnitNumbers(a.unit_number, b.unit_number));
 }
 
 export async function findById(id: string): Promise<Unit | null> {
@@ -84,6 +89,7 @@ export async function create(dto: CreateUnitDto): Promise<Unit> {
     area: dto.area,
     ownership_ratio: dto.ownership_ratio,
     status: dto.status || Status.ACTIVE,
+    operational_status: dto.operational_status || "VACANT",
   };
 
   const { data, error } = await supabase
@@ -119,6 +125,7 @@ export async function update(id: string, dto: UpdateUnitDto): Promise<Unit | nul
   if (dto.area !== undefined) payload.area = dto.area;
   if (dto.ownership_ratio !== undefined) payload.ownership_ratio = dto.ownership_ratio;
   if (dto.status !== undefined) payload.status = dto.status;
+  if (dto.operational_status !== undefined) (payload as Record<string, unknown>).operational_status = dto.operational_status;
   payload.updated_at = new Date().toISOString();
 
   const { data, error } = await supabase

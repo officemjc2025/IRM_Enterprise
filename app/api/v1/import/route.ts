@@ -3,12 +3,29 @@ import { createClient } from "@/lib/supabase/server";
 import { unitService } from "@/services/unit/unit.service";
 import { Unit, UpdateUnitDto } from "@/features/unit/types/unit.types";
 import { personService } from "@/services/person/person.service";
+
 import { Person, UpdatePersonDto } from "@/features/person/types/person.types";
 import { Status } from "@/shared/enums/status";
+import {
+  UnitOperationalStatus as CanonicalOpStatus,
+} from "@/shared/enums/unit-operational-status";
 import { ownerService } from "@/services/owner/owner.service";
 import { Owner, UpdateOwnerDto as UpdateOwnerTypeDto } from "@/features/owner/types/owner.types";
+import { ownershipService } from "@/services/ownership/ownership.service";
+import { UpdateOwnershipDto } from "@/features/ownership/types/ownership.types";
 import { occupancyService } from "@/services/occupancy/occupancy.service";
 import { Occupancy, UpdateOccupancyDto, OccupancyType } from "@/features/occupancy/types/occupancy.types";
+
+interface DbOwnerAssignment {
+  id: string;
+  person_id: string;
+  unit_id: string;
+  ownership_percent: number;
+  ownership_type: string;
+  start_date: string;
+  end_date: string | null;
+  status: string;
+}
 
 export async function POST(request: Request) {
   console.log("Import Started");
@@ -16,7 +33,7 @@ export async function POST(request: Request) {
   try {
     const supabase = await createClient();
     const body = await request.json();
-    const { payload, moduleName } = body;
+    const { payload, moduleName, importStrategy } = body;
 
     if (!Array.isArray(payload)) {
       console.log("Import Failed");
@@ -672,6 +689,447 @@ export async function POST(request: Request) {
           errors: 0,
           elapsedTime: (elapsed / 1000).toFixed(2) + "s",
         },
+      });
+    }
+
+    if (moduleName === "owner_relationship") {
+      // 1. Business Validation
+      const uniquePropertyIds = Array.from(new Set(payload.map(item => item.property_id).filter(Boolean)));
+      if (uniquePropertyIds.length === 0) {
+        throw new Error("No property ID specified in import data.");
+      }
+
+      const { data: validProperties, error: propertiesError } = await supabase
+        .from("properties")
+        .select("id")
+        .in("id", uniquePropertyIds);
+
+      if (propertiesError) {
+        throw new Error(`Failed to verify property existence: ${propertiesError.message}`);
+      }
+
+      const validPropertyIdSet = new Set(validProperties?.map(p => p.id) || []);
+
+      for (const item of payload) {
+        if (!item.unit_id) {
+          throw new Error("Unit ID is required for owner assignment.");
+        }
+        if (!item.person_id) {
+          throw new Error("Person ID is required for owner assignment.");
+        }
+        if (!item.property_id || !validPropertyIdSet.has(item.property_id)) {
+          throw new Error(`Target property ID '${item.property_id || "missing"}' does not exist.`);
+        }
+      }
+
+      // Load existing active owner assignments
+      const { data: existingOwns } = await supabase
+        .from("owner_assignments")
+        .select("*")
+        .eq("status", "ACTIVE")
+        .is("deleted_at", null);
+
+
+
+      const existingOwnsMap = new Map<string, DbOwnerAssignment>(); // "unit_id:person_id" -> row
+      if (existingOwns) {
+        existingOwns.forEach(o => {
+          existingOwnsMap.set(`${o.unit_id}:${o.person_id}`, o as unknown as DbOwnerAssignment);
+        });
+      }
+
+      // Track creations and updates for rollback
+      const createdIds: string[] = [];
+      const updatedOwns: { id: string; original: UpdateOwnershipDto }[] = [];
+
+      let insertedCount = 0;
+      let updatedCount = 0;
+      let skippedCount = 0;
+
+      try {
+        for (const item of payload) {
+          const key = `${item.unit_id}:${item.person_id}`;
+          const existing = existingOwnsMap.get(key);
+
+          const percent = Number(
+            item.ownership_percent !== undefined && item.ownership_percent !== null
+              ? item.ownership_percent
+              : (item.ownership_percentage !== undefined && item.ownership_percentage !== null
+                  ? item.ownership_percentage
+                  : 100)
+          );
+          const typeVal = String(item.owner_type || "OWNER").trim();
+          const startDate = item.move_in_date ? String(item.move_in_date).trim() : new Date().toISOString().split("T")[0];
+          const endDate = item.move_out_date ? String(item.move_out_date).trim() : null;
+          const statusVal = (item.status || "ACTIVE").toUpperCase() as Status;
+
+          if (existing) {
+            const hasChanged =
+              Number(existing.ownership_percent) !== percent ||
+              existing.ownership_type !== typeVal ||
+              existing.start_date !== startDate ||
+              (existing.end_date || "") !== (endDate || "") ||
+              existing.status !== statusVal;
+
+            if (hasChanged) {
+              updatedOwns.push({
+                id: existing.id,
+                original: {
+                  person_id: existing.person_id,
+                  unit_id: existing.unit_id,
+                  ownership_percentage: Number(existing.ownership_percent),
+                  ownership_type: existing.ownership_type,
+                  start_date: existing.start_date,
+                  end_date: existing.end_date,
+                  status: existing.status as Status,
+                }
+              });
+
+              const updated = await ownershipService.updateOwnership(existing.id, {
+                person_id: item.person_id,
+                unit_id: item.unit_id,
+                ownership_percentage: percent,
+                ownership_type: typeVal,
+                start_date: startDate,
+                end_date: endDate,
+                status: statusVal,
+              });
+
+              if (!updated) {
+                throw new Error(`Failed to update ownership for unit: ${item.unit_number}`);
+              }
+              updatedCount++;
+            } else {
+              skippedCount++;
+            }
+          } else {
+            const created = await ownershipService.createOwnership({
+              person_id: item.person_id,
+              unit_id: item.unit_id,
+              ownership_percentage: percent,
+              ownership_type: typeVal,
+              start_date: startDate,
+              end_date: endDate,
+              status: statusVal,
+            });
+
+            if (!created?.id) {
+              throw new Error(`Failed to assign owner to unit: ${item.unit_number}`);
+            }
+            createdIds.push(created.id);
+            insertedCount++;
+          }
+        }
+      } catch (dbErr: unknown) {
+        console.error("Database commit error, performing rollback:", dbErr);
+
+        if (createdIds.length > 0) {
+          await supabase.from("owner_assignments").delete().in("id", createdIds);
+        }
+        for (const updateInfo of updatedOwns) {
+          await ownershipService.updateOwnership(updateInfo.id, updateInfo.original);
+        }
+
+        console.log("Import Failed");
+        const elapsed = Date.now() - startTime;
+        return NextResponse.json({
+          success: false,
+          message: "Import failed. No data has been saved.",
+          summary: {
+            inserted: 0,
+            updated: 0,
+            skipped: 0,
+            errors: payload.length,
+            elapsedTime: (elapsed / 1000).toFixed(2) + "s",
+          }
+        });
+      }
+
+      console.log("Import Finished");
+      const elapsed = Date.now() - startTime;
+      return NextResponse.json({
+        success: true,
+        message: "✔ Import completed successfully",
+        summary: {
+          inserted: insertedCount,
+          updated: updatedCount,
+          skipped: skippedCount,
+          errors: 0,
+          elapsedTime: (elapsed / 1000).toFixed(2) + "s",
+        },
+      });
+    }
+
+
+// ============================================================
+// Canonical Operational Status Resolver (Bootstrap-only)
+// Maps workbook STATUS column values to three domain decisions:
+//   1. unitStatus        → public.units.status (generic soft-delete flag)
+//   2. ownerType         → owner_assignments.ownership_type  (null = no owner)
+//   3. occupancyType     → occupancies.occupancy_type        (null = no occupancy)
+//   4. operationalStatus → public.units.operational_status   (canonical state)
+//
+// ⚠️  BOOTSTRAP ONLY — After Go-Live, operational_status is lifecycle-driven.
+//     This resolver is ONLY called during import to set the initial state.
+// ============================================================
+type UnitOperationalStatus = {
+  unitStatus: string;                      // DB value for units.status
+  ownerType: string | null;                // null = suppress owner assignment
+  occupancyType: OccupancyType | null;     // null = no occupancy record
+  operationalStatus: CanonicalOpStatus | null; // canonical operational_status value (null = preserve or skip)
+  warning?: string;                        // optional warning message
+};
+
+function resolveOperationalStatus(_rawStatus: string | null | undefined): UnitOperationalStatus {
+  // LEGACY CLASSIFICATION ONLY: Legacy status column is ignored for operational/occupancy mappings.
+  // All units initialize as ACTIVE with OWNER ownerType, null occupancyType, and VACANT operationalStatus.
+  return {
+    unitStatus: "ACTIVE",
+    ownerType: "OWNER",
+    occupancyType: null,
+    operationalStatus: "VACANT",
+  };
+}
+
+if (moduleName === "combined_metro") {
+      // 1. Business Validation
+      const uniquePropertyIds = Array.from(new Set(payload.map(item => item.property_id).filter(Boolean)));
+      if (uniquePropertyIds.length === 0) {
+        throw new Error("No property ID specified in import data.");
+      }
+      const propertyId = uniquePropertyIds[0];
+
+      const { data: propertyExists } = await supabase
+        .from("properties")
+        .select("id")
+        .eq("id", propertyId)
+        .single();
+
+      if (!propertyExists) {
+        throw new Error("Target property not found.");
+      }
+
+      // Local strategy settings
+      const strategy = importStrategy || "dry_run";
+      const isBootstrap = !!(
+        body.isBootstrap ||
+        body.importMode === "bootstrap" ||
+        body.importStrategy === "bootstrap" ||
+        body.importMode === "BOOTSTRAP"
+      );
+
+      const warnings: string[] = [];
+
+      // CANONICAL PLANNER DATA STRUCTURES
+      const units_to_upsert: Array<{
+        unit_number: string;
+        floor: string;
+        area: number;
+        ownership_ratio: number;
+        status: string;
+        operational_status: string | null;
+      }> = [];
+
+      const persons_to_create: Array<{
+        display_name: string;
+        first_name: string;
+        last_name: string;
+        unit_number: string;
+      }> = [];
+
+      const ownerships_to_create: Array<{
+        unit_number: string;
+        owner_name: string;
+        ownership_type: string;
+        ownership_percent: number;
+      }> = [];
+
+      const meters_to_create: Array<{
+        unit_number: string;
+        utility_type: "WATER" | "ELECTRICITY";
+        meter_number: string;
+      }> = [];
+
+      // Pre-calculate owner counts per unit for Multi-Owner safety checks
+      const ownerCountsByUnit = new Map<string, number>();
+      for (const item of payload) {
+        const unitNum = String(item.unit_number || "").trim().toUpperCase();
+        const ownerName = String(item.owner_name || "").trim();
+        if (unitNum && ownerName) {
+          ownerCountsByUnit.set(unitNum, (ownerCountsByUnit.get(unitNum) || 0) + 1);
+        }
+      }
+
+      const processedUnits = new Set<string>();
+      const processedPersons = new Set<string>();
+      const processedMeters = new Set<string>();
+
+      for (const item of payload) {
+        const unitNum = String(item.unit_number || "").trim().toUpperCase();
+        if (!unitNum) continue;
+
+        // A. Operational Status mapping & validation
+        const opStatus = resolveOperationalStatus(item.occupancy_type || item.status);
+        if (opStatus.warning) {
+          warnings.push(`Unit ${unitNum}: ${opStatus.warning}`);
+        }
+
+        // B. Plan Unit upsert
+        if (!processedUnits.has(unitNum)) {
+          processedUnits.add(unitNum);
+          units_to_upsert.push({
+            unit_number: unitNum,
+            floor: String(item.floor || "1"),
+            area: Number(item.area || 0),
+            ownership_ratio: Number(item.ownership_ratio || 0),
+            status: opStatus.unitStatus,
+            operational_status: isBootstrap ? opStatus.operationalStatus : null,
+          });
+        }
+
+        // C. Plan Person creation
+        const ownerName = String(item.owner_name || "").trim();
+        let personKey = "";
+        if (ownerName) {
+          const parts = ownerName.split(/\s+/);
+          const firstName = parts[0] || "";
+          const lastName = parts.slice(1).join(" ") || "-";
+          personKey = `${firstName.toUpperCase()}::${lastName.toUpperCase()}`;
+
+          if (!processedPersons.has(personKey)) {
+            processedPersons.add(personKey);
+            persons_to_create.push({
+              display_name: ownerName,
+              first_name: firstName,
+              last_name: lastName,
+              unit_number: unitNum,
+            });
+          }
+        }
+
+        // D. Plan Owner Assignment (with single-owner policy and multi-owner safety check)
+        if (ownerName && opStatus.ownerType) {
+          const count = ownerCountsByUnit.get(unitNum) || 0;
+          if (count === 1) {
+            // SINGLE_KNOWN_OWNER_DEFAULT_POLICY
+            ownerships_to_create.push({
+              unit_number: unitNum,
+              owner_name: ownerName,
+              ownership_type: opStatus.ownerType,
+              ownership_percent: 100.00,
+            });
+          } else {
+            // MULTI-OWNER SAFETY: Skip Owner Assignment domain and emit warning (INTENTIONAL_DOMAIN_SKIP)
+            warnings.push(`Unit ${unitNum}: Skip Owner Assignment — Multiple owners detected (${count}) and independent shares are not provided.`);
+          }
+        }
+
+        // E. Plan Utility Meters (only if independently evidenced)
+        if (item.water_meter) {
+          const wmNumber = String(item.water_meter).trim();
+          const meterKey = `${unitNum}:WATER`;
+          if (!processedMeters.has(meterKey)) {
+            processedMeters.add(meterKey);
+            meters_to_create.push({
+              unit_number: unitNum,
+              utility_type: "WATER",
+              meter_number: wmNumber,
+            });
+          }
+        }
+
+        if (item.electricity_meter) {
+          const emNumber = String(item.electricity_meter).trim();
+          const meterKey = `${unitNum}:ELECTRICITY`;
+          if (!processedMeters.has(meterKey)) {
+            processedMeters.add(meterKey);
+            meters_to_create.push({
+              unit_number: unitNum,
+              utility_type: "ELECTRICITY",
+              meter_number: emNumber,
+            });
+          }
+        }
+      }
+
+      // Load existing counts for Dry Run summary simulation
+      const { data: dbUnits } = await supabase
+        .from("units")
+        .select("unit_number")
+        .eq("property_id", propertyId)
+        .is("deleted_at", null);
+      const existingUnitsSet = new Set((dbUnits || []).map(u => u.unit_number.trim().toUpperCase()));
+
+      let dryRunInserted = 0;
+      let dryRunUpdated = 0;
+      for (const u of units_to_upsert) {
+        if (existingUnitsSet.has(u.unit_number)) {
+          dryRunUpdated++;
+        } else {
+          dryRunInserted++;
+        }
+      }
+
+      // EXECUTE BATCH OR RETURN DRY RUN PREVIEW
+      if (strategy === "dry_run") {
+        const elapsed = Date.now() - startTime;
+        return NextResponse.json({
+          success: true,
+          isDryRun: true,
+          message: "✔ Dry run simulation completed successfully. Zero database writes performed.",
+          summary: {
+            inserted: dryRunInserted,
+            updated: dryRunUpdated,
+            skipped: payload.length - (dryRunInserted + dryRunUpdated),
+            errors: 0,
+            elapsedTime: (elapsed / 1000).toFixed(2) + "s",
+          },
+          warnings: Array.from(new Set(warnings)),
+          plan: {
+            units_to_upsert,
+            persons_to_create,
+            ownerships_to_create,
+            meters_to_create,
+          }
+        });
+      }
+
+      // REAL COMMIT PATH — SINGLE ATOMIC TRANSACTION VIA RPC
+      const { data: importResult, error: importError } = await supabase.rpc(
+        "import_validated_metro_plan",
+        {
+          p_property_id: propertyId,
+          p_plan: {
+            units_to_upsert,
+            persons_to_create,
+            ownerships_to_create,
+            meters_to_create,
+          }
+        }
+      );
+
+      if (importError) {
+        console.error("Validated plan batch import failed in database transaction:", importError);
+        return NextResponse.json({
+          success: false,
+          message: `Batch import failed: ${importError.message}`,
+          summary: {
+            inserted: 0,
+            updated: 0,
+            skipped: 0,
+            errors: payload.length,
+            elapsedTime: ((Date.now() - startTime) / 1000).toFixed(2) + "s",
+          }
+        }, { status: 400 });
+      }
+
+      const elapsed = Date.now() - startTime;
+      return NextResponse.json({
+        success: true,
+        message: "✔ Import completed atomically in a single database transaction",
+        summary: importResult.summary,
+        warnings: Array.from(new Set(warnings)),
+        elapsedTime: (elapsed / 1000).toFixed(2) + "s",
       });
     }
 

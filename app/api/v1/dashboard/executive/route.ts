@@ -45,7 +45,7 @@ export async function GET() {
       personsResult,
     ] = await Promise.all([
       // 1. Total Units count
-      supabase.from("units").select("id, status"),
+      supabase.from("units").select("id, status, operational_status"),
       // 2. Active assignments (for occupied units & recent assignments log)
       supabase.from("resident_assignments")
         .select(`
@@ -136,10 +136,33 @@ export async function GET() {
 
     // --- SECTION 2: Property Overview ---
     const totalUnits = units.length;
-    const occupiedUnitIds = new Set(activeAssignments.map((a) => a.unit_id));
-    const occupiedUnits = occupiedUnitIds.size;
-    const vacantUnits = totalUnits - occupiedUnits;
+
+    // Derive occupied/vacant from operational_status (canonical source)
+    const occupiedStatuses = new Set([
+      "OWNER_OCCUPIED", "TENANT_OCCUPIED", "STAFF", "MJC",
+      "CHECKED_IN", "CHECKING_IN", "CHECKING_OUT", "RESERVED",
+    ]);
+    const occupiedUnits = units.filter((u) => occupiedStatuses.has(u.operational_status || "")).length;
+    const vacantUnits = units.filter((u) => (u.operational_status || "VACANT") === "VACANT").length;
     const occupancyRate = totalUnits > 0 ? parseFloat(((occupiedUnits / totalUnits) * 100).toFixed(1)) : 0;
+
+    // --- SECTION 2b: Unit Status Breakdown ---
+    const statusCounts = (s: string) => units.filter((u) => u.operational_status === s).length;
+    const unitStatusBreakdown = {
+      owner_occupied:  statusCounts("OWNER_OCCUPIED"),
+      tenant_occupied: statusCounts("TENANT_OCCUPIED"),
+      vacant:          statusCounts("VACANT"),
+      reserved:        statusCounts("RESERVED"),
+      checking_in:     statusCounts("CHECKING_IN"),
+      checked_in:      statusCounts("CHECKED_IN"),
+      checking_out:    statusCounts("CHECKING_OUT"),
+      maintenance:     statusCounts("MAINTENANCE"),
+      out_of_service:  statusCounts("OUT_OF_SERVICE"),
+      locked:          statusCounts("LOCKED"),
+      staff:           statusCounts("STAFF"),
+      mjc:             statusCounts("MJC"),
+      total:           totalUnits,
+    };
 
     // --- SECTION 3: Visitors ---
     const visitorsToday = visitors.filter((v) => v.visit_date === todayStr).length;
@@ -265,6 +288,7 @@ export async function GET() {
           totalOwners,
           totalResidents,
         },
+        unitStatusBreakdown,
         visitors: {
           today: visitorsToday,
           checkedIn: visitorsCheckedIn,

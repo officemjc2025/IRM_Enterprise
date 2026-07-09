@@ -180,32 +180,72 @@ export async function PUT(request: Request, { params }: Params) {
       }
     }
 
-    const updated = await workOrderService.updateWorkOrder(id, {
-      ...body,
-      updated_by: user.id,
-    });
+    const isStatusUpdate = body.status !== undefined && body.status !== order.status;
 
-    if (!updated) {
-      return NextResponse.json(
-        { success: false, message: "Work order not found or update failed" },
-        { status: 404 }
+    let updated: WorkOrder | null = null;
+
+    if (isStatusUpdate) {
+      // -------------------------------------------------------
+      // ATOMIC OPERATIONAL TRANSITION (FAIL-CLOSED)
+      // Call transition_work_order_status RPC which handles locking,
+      // authorization, status update, derivation, and audit logs.
+      // -------------------------------------------------------
+      const { error: transitionError } = await supabase.rpc(
+        "transition_work_order_status",
+        {
+          p_work_order_id: id,
+          p_new_status: body.status,
+          p_reason: body.remark || `Work order status changed to ${body.status}`,
+        }
       );
+
+      if (transitionError) {
+        return NextResponse.json(
+          { success: false, message: `Atomic transition failed: ${transitionError.message}` },
+          { status: 400 }
+        );
+      }
+
+      // If there are other fields in the body, update them now
+      const otherFields = { ...body };
+      delete otherFields.status;
+      if (Object.keys(otherFields).length > 0) {
+        await workOrderService.updateWorkOrder(id, {
+          ...otherFields,
+          updated_by: user.id,
+        });
+      }
+
+      updated = await workOrderService.getWorkOrderById(id);
+    } else {
+      // Standard non-status update
+      updated = await workOrderService.updateWorkOrder(id, {
+        ...body,
+        updated_by: user.id,
+      });
+
+      if (!updated) {
+        return NextResponse.json(
+          { success: false, message: "Work order not found or update failed" },
+          { status: 404 }
+        );
+      }
+
+      // Log to entity_change_history using database RPC
+      const { error: rpcError } = await supabase.rpc("log_entity_change", {
+        p_entity_type: "work_orders",
+        p_entity_id: id,
+        p_action_type: "EDIT",
+        p_changed_fields: body,
+        p_reason: null,
+      });
+
+      if (rpcError) {
+        console.error("Audit log error:", rpcError);
+      }
     }
 
-    // Log to entity_change_history using database RPC
-    const { error: rpcError } = await supabase.rpc("log_entity_change", {
-      p_entity_type: "work_orders",
-      p_entity_id: id,
-      p_action_type: "EDIT",
-      p_changed_fields: body,
-      p_reason: null,
-    });
-
-    if (rpcError) {
-      console.error("Audit log error:", rpcError);
-    }
-
-    if (!isAdmin) {
+    if (!isAdmin && updated) {
       updated.actual_cost = null;
     }
 

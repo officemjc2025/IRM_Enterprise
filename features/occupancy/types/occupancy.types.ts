@@ -5,6 +5,7 @@ export type OccupancyType =
   | "CO_OWNER"
   | "TENANT"
   | "RESIDENT"
+  | "STAFF"
   | "COMPANY"
   | "VACANT";
 
@@ -13,6 +14,7 @@ export const OCCUPANCY_TYPES: OccupancyType[] = [
   "CO_OWNER",
   "TENANT",
   "RESIDENT",
+  "STAFF",
   "COMPANY",
   "VACANT",
 ];

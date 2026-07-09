@@ -10,6 +10,7 @@ interface LocalizedDatePickerProps {
   locale: "th" | "en";
   label?: string;
   className?: string;
+  disabled?: boolean;
 }
 
 export function LocalizedDatePicker({
@@ -17,7 +18,8 @@ export function LocalizedDatePicker({
   onChange,
   locale,
   label,
-  className = ""
+  className = "",
+  disabled = false
 }: LocalizedDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -100,8 +102,12 @@ export function LocalizedDatePicker({
         <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">{label}</label>
       )}
       <div
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs dark:bg-slate-900 cursor-pointer outline-none font-bold text-slate-800 dark:text-slate-200 flex justify-between items-center"
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs dark:bg-slate-900 outline-none font-bold flex justify-between items-center ${
+          disabled
+            ? "bg-slate-100 dark:bg-slate-800 text-slate-400 cursor-not-allowed"
+            : "cursor-pointer text-slate-800 dark:text-slate-200"
+        }`}
       >
         <span>{getDisplayValue() || (locale === "th" ? "เลือกวันที่..." : "Select date...")}</span>
         <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -176,6 +182,7 @@ interface LocalizedDateTimePickerProps {
   locale: "th" | "en";
   label?: string;
   className?: string;
+  disabled?: boolean;
 }
 
 export function LocalizedDateTimePicker({
@@ -184,7 +191,8 @@ export function LocalizedDateTimePicker({
   required = false,
   locale,
   label,
-  className = ""
+  className = "",
+  disabled = false
 }: LocalizedDateTimePickerProps) {
   // Split input value into date and time parts
   let datePart = "";
@@ -220,14 +228,16 @@ export function LocalizedDateTimePicker({
           onChange={handleDateChange}
           required={required}
           locale={locale}
+          disabled={disabled}
           className="flex-1"
         />
         <input
           type="time"
           value={timePart}
           required={required}
+          disabled={disabled}
           onChange={(e) => handleTimeChange(e.target.value)}
-          className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs dark:bg-slate-900 outline-none font-bold text-slate-800 dark:text-slate-200"
+          className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs dark:bg-slate-900 outline-none font-bold text-slate-800 dark:text-slate-200 disabled:bg-slate-100 disabled:dark:bg-slate-800 disabled:text-slate-400 disabled:cursor-not-allowed"
         />
       </div>
     </div>

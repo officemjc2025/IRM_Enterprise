@@ -38,7 +38,10 @@ export type CanonicalField =
   | "move_in_date"
   | "move_out_date"
   | "primary_resident"
-  | "status";
+  | "status"
+  | "water_meter"
+  | "electricity_meter"
+  | "resident_name";
 
 export const CANONICAL_FIELDS: CanonicalField[] = [
   "property_code",
@@ -65,6 +68,9 @@ export const CANONICAL_FIELDS: CanonicalField[] = [
   "move_out_date",
   "primary_resident",
   "status",
+  "water_meter",
+  "electricity_meter",
+  "resident_name",
 ];
 
 export type ColumnMapping = Record<string, CanonicalField | "">;

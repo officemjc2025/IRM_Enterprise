@@ -53,6 +53,7 @@ interface WorkOrderDbRow {
     building_code: string | null;
     floor: string | null;
     status: string;
+    operational_status: string | null;
   } | null;
 
   resident_assignments?: {
@@ -208,6 +209,7 @@ function mapToWorkOrder(row: WorkOrderDbRow): WorkOrder {
       floor: row.units.floor || "",
       property_id: row.property_id,
       status: (row.units.status || "ACTIVE").toUpperCase() as Status,
+      operational_status: (row.units.operational_status || "VACANT").toUpperCase() as import("@/shared/enums/unit-operational-status").UnitOperationalStatus,
       area: 0,
       ownership_ratio: 0,
       created_at: "",

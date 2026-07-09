@@ -7,6 +7,22 @@ import { useRouter } from "next/navigation";
 import { PageHeader, LoadingState } from "@/shared/ui";
 import { createClient } from "@/lib/supabase/client";
 
+interface UnitStatusBreakdown {
+  owner_occupied: number;
+  tenant_occupied: number;
+  vacant: number;
+  reserved: number;
+  checking_in: number;
+  checked_in: number;
+  checking_out: number;
+  maintenance: number;
+  out_of_service: number;
+  locked: number;
+  staff: number;
+  mjc: number;
+  total: number;
+}
+
 interface DashboardStats {
   todaysOperations: {
     visitorsWaitingApproval: number;
@@ -24,6 +40,7 @@ interface DashboardStats {
     totalOwners: number;
     totalResidents: number;
   };
+  unitStatusBreakdown: UnitStatusBreakdown;
   visitors: {
     today: number;
     checkedIn: number;
@@ -226,6 +243,110 @@ export default function ExecutiveDashboardPage() {
               <span className="text-2xl font-bold block text-pink-400">{stats.todaysOperations.documentsPublishedThisWeek}</span>
               <span className="text-xs text-slate-400 mt-1 block">{language === "en" ? "Docs This Week" : "เอกสารอัปโหลดสัปดาห์นี้"}</span>
             </div>
+          </div>
+        </section>
+
+        {/* 1b. Unit Operational Status Grid */}
+        <section>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">
+            🏢 {language === "en" ? "Unit Operational Status" : "สถานะการดำเนินงานของห้องชุด"}
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {/* Occupied (Owner + Tenant) */}
+            <button
+              onClick={() => router.push("/units?op_status=OWNER_OCCUPIED")}
+              className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 text-left hover:shadow-md hover:border-blue-400 dark:hover:border-blue-600 transition-all group"
+            >
+              <div className="text-2xl font-bold text-blue-700 dark:text-blue-300 group-hover:scale-105 transition-transform">
+                {stats.unitStatusBreakdown.owner_occupied + stats.unitStatusBreakdown.tenant_occupied}
+              </div>
+              <div className="text-[11px] text-blue-600 dark:text-blue-400 font-semibold mt-1">
+                🏠 {language === "en" ? "Occupied" : "มีผู้พักอาศัย"}
+              </div>
+              <div className="text-[10px] text-blue-400 dark:text-blue-500 mt-0.5">
+                {stats.unitStatusBreakdown.owner_occupied} owner · {stats.unitStatusBreakdown.tenant_occupied} tenant
+              </div>
+            </button>
+
+            {/* Vacant */}
+            <button
+              onClick={() => router.push("/units?op_status=VACANT")}
+              className="bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700 rounded-xl p-4 text-left hover:shadow-md hover:border-slate-400 dark:hover:border-slate-500 transition-all group"
+            >
+              <div className="text-2xl font-bold text-slate-600 dark:text-slate-300 group-hover:scale-105 transition-transform">
+                {stats.unitStatusBreakdown.vacant}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-slate-400 font-semibold mt-1">
+                ⬜ {language === "en" ? "Vacant" : "ห้องว่าง"}
+              </div>
+              <div className="text-[10px] text-slate-400 mt-0.5">
+                {stats.unitStatusBreakdown.total > 0 ? ((stats.unitStatusBreakdown.vacant / stats.unitStatusBreakdown.total) * 100).toFixed(0) : 0}% of total
+              </div>
+            </button>
+
+            {/* Reserved / Staying */}
+            <button
+              onClick={() => router.push("/units?op_status=RESERVED")}
+              className="bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 rounded-xl p-4 text-left hover:shadow-md hover:border-purple-400 dark:hover:border-purple-600 transition-all group"
+            >
+              <div className="text-2xl font-bold text-purple-700 dark:text-purple-300 group-hover:scale-105 transition-transform">
+                {stats.unitStatusBreakdown.reserved + stats.unitStatusBreakdown.checked_in + stats.unitStatusBreakdown.checking_in + stats.unitStatusBreakdown.checking_out}
+              </div>
+              <div className="text-[11px] text-purple-600 dark:text-purple-400 font-semibold mt-1">
+                📅 {language === "en" ? "Reserved / Stay" : "จอง / เข้าพัก"}
+              </div>
+              <div className="text-[10px] text-purple-400 dark:text-purple-500 mt-0.5">
+                {stats.unitStatusBreakdown.checked_in} in · {stats.unitStatusBreakdown.checking_out} out
+              </div>
+            </button>
+
+            {/* Maintenance */}
+            <button
+              onClick={() => router.push("/units?op_status=MAINTENANCE")}
+              className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 text-left hover:shadow-md hover:border-amber-400 dark:hover:border-amber-600 transition-all group"
+            >
+              <div className="text-2xl font-bold text-amber-700 dark:text-amber-300 group-hover:scale-105 transition-transform">
+                {stats.unitStatusBreakdown.maintenance}
+              </div>
+              <div className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold mt-1">
+                🔧 {language === "en" ? "Maintenance" : "ซ่อมบำรุง"}
+              </div>
+              <div className="text-[10px] text-amber-400 dark:text-amber-500 mt-0.5">
+                {language === "en" ? "WO locked" : "ใบงานซ่อม"}
+              </div>
+            </button>
+
+            {/* Out of Service / Locked */}
+            <button
+              onClick={() => router.push("/units?op_status=OUT_OF_SERVICE")}
+              className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-xl p-4 text-left hover:shadow-md hover:border-red-400 dark:hover:border-red-600 transition-all group"
+            >
+              <div className="text-2xl font-bold text-red-700 dark:text-red-300 group-hover:scale-105 transition-transform">
+                {stats.unitStatusBreakdown.out_of_service + stats.unitStatusBreakdown.locked}
+              </div>
+              <div className="text-[11px] text-red-600 dark:text-red-400 font-semibold mt-1">
+                🚫 {language === "en" ? "Out of Service" : "ปิดให้บริการ"}
+              </div>
+              <div className="text-[10px] text-red-400 dark:text-red-500 mt-0.5">
+                {stats.unitStatusBreakdown.out_of_service} oos · {stats.unitStatusBreakdown.locked} locked
+              </div>
+            </button>
+
+            {/* Staff / MJC */}
+            <button
+              onClick={() => router.push("/units?op_status=STAFF")}
+              className="bg-sky-50 dark:bg-sky-950/20 border border-sky-200 dark:border-sky-800 rounded-xl p-4 text-left hover:shadow-md hover:border-sky-400 dark:hover:border-sky-600 transition-all group"
+            >
+              <div className="text-2xl font-bold text-sky-700 dark:text-sky-300 group-hover:scale-105 transition-transform">
+                {stats.unitStatusBreakdown.staff + stats.unitStatusBreakdown.mjc}
+              </div>
+              <div className="text-[11px] text-sky-600 dark:text-sky-400 font-semibold mt-1">
+                👷 {language === "en" ? "Staff / MJC" : "เจ้าหน้าที่ / MJC"}
+              </div>
+              <div className="text-[10px] text-sky-400 dark:text-sky-500 mt-0.5">
+                {stats.unitStatusBreakdown.staff} staff · {stats.unitStatusBreakdown.mjc} mjc
+              </div>
+            </button>
           </div>
         </section>
 

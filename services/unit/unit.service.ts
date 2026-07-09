@@ -1,5 +1,6 @@
 import * as unitRepository from "@/repositories/unit/unit.repository";
 import { Unit, CreateUnitDto, UpdateUnitDto } from "@/features/unit/types/unit.types";
+import { UnitOperationalStatus, UNIT_OPERATIONAL_STATUSES } from "@/shared/enums/unit-operational-status";
 
 export const unitService = {
   async getUnits(): Promise<Unit[]> {
@@ -33,6 +34,7 @@ export const unitService = {
       unit_number: dto.unit_number.trim(),
       floor: dto.floor.trim(),
       building_code: dto.building_code ? dto.building_code.trim() : "",
+      operational_status: dto.operational_status || "VACANT",
     });
   },
 
@@ -60,8 +62,25 @@ export const unitService = {
     return unitRepository.update(id, payload);
   },
 
+  /**
+   * Lifecycle-only method — changes operational_status.
+   * MUST be called only from the /api/v1/units/:id/status route
+   * after role authorization and before audit logging.
+   */
+  async changeOperationalStatus(
+    id: string,
+    newStatus: UnitOperationalStatus
+  ): Promise<Unit | null> {
+    if (!id) throw new Error("Unit ID is required");
+    if (!UNIT_OPERATIONAL_STATUSES.includes(newStatus)) {
+      throw new Error(`Invalid operational status: ${newStatus}`);
+    }
+    return unitRepository.update(id, { operational_status: newStatus });
+  },
+
   async archiveUnit(id: string): Promise<boolean> {
     if (!id) throw new Error("Unit ID is required");
     return unitRepository.archive(id);
-  }
+  },
 };
+
