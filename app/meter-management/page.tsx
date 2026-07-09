@@ -125,6 +125,9 @@ export default function MeterManagementPage() {
   const [newMeterInitialReading, setNewMeterInitialReading] = useState("");
   const [createMeterFormError, setCreateMeterFormError] = useState<string | null>(null);
 
+  // Meter Coverage info panel (replaces synthetic bootstrap modal)
+  const [showCoverageInfoPanel, setShowCoverageInfoPanel] = useState(false);
+
   // Control Status tab
   const [selectedUnitForControl, setSelectedUnitForControl] = useState<UnitOption | null>(null);
   const [controlType, setControlType] = useState<"WATER" | "ELECTRICITY">("WATER");
@@ -507,6 +510,11 @@ export default function MeterManagementPage() {
       console.error(err);
     }
   };
+
+  // The Bootstrap workflow now requires real meter data via XLSX import.
+  // No synthetic meter numbers are generated. Admins are directed to the Import tab.
+  // This stub is kept for compatibility with any remaining ref but is not called by UI.
+
 
   // Meter registration submission
   const handleCreateMeter = async (e: React.FormEvent) => {
@@ -1771,17 +1779,87 @@ export default function MeterManagementPage() {
         {/* Tab 5: Registry */}
         {activeTab === "registry" && (
           <div className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex justify-between items-center flex-wrap gap-2">
               <h3 className="text-sm font-bold text-slate-800 dark:text-white">
                 {language === "en" ? "Property Meters Registry" : "ทะเบียนคุมมิเตอร์น้ำ/ไฟรายโครงการ"}
               </h3>
-              <button
-                onClick={() => setShowCreateMeterModal(true)}
-                className="px-4 py-2 bg-[#D4AF37] hover:bg-[#D4AF37]/90 text-white font-bold rounded-xl transition text-xs shadow-sm"
-              >
-                + {language === "en" ? "Register Meter" : "ขึ้นทะเบียนมิเตอร์ใหม่"}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowCoverageInfoPanel(true)}
+                  className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white font-bold rounded-xl transition text-xs shadow-sm"
+                >
+                  📋 {language === "en" ? "Bulk Import Guide" : "วิธีนำเข้าข้อมูลมิเตอร์"}
+                </button>
+                <button
+                  onClick={() => setShowCreateMeterModal(true)}
+                  className="px-4 py-2 bg-[#D4AF37] hover:bg-[#D4AF37]/90 text-white font-bold rounded-xl transition text-xs shadow-sm"
+                >
+                  + {language === "en" ? "Register Meter" : "ขึ้นทะเบียนมิเตอร์ใหม่"}
+                </button>
+              </div>
             </div>
+
+            {/* Registry Coverage Summary — displays truthful state, 0% when no real meters registered */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {(["WATER", "ELECTRICITY"] as const).map(type => {
+                const typeMeters = meters.filter(m => m.utility_type === type && m.meter_status === "ACTIVE");
+                const coverage = units.length > 0 ? Math.round((typeMeters.length / units.length) * 100) : 0;
+                const unmetered = units.length - typeMeters.length;
+                return (
+                  <div key={type} className={`rounded-xl p-3 border ${
+                    type === "WATER" ? "bg-sky-50 border-sky-200" : "bg-amber-50 border-amber-200"
+                  }`}>
+                    <div className="text-lg font-black">{type === "WATER" ? "💧" : "⚡"}</div>
+                    <div className="font-bold text-slate-700 text-xs mt-1">
+                      {type === "WATER" ? (language === "en" ? "Water Meters" : "มิเตอร์น้ำ") : (language === "en" ? "Electricity Meters" : "มิเตอร์ไฟ")}
+                    </div>
+                    <div className="text-xl font-black text-slate-800 mt-0.5">{typeMeters.length}</div>
+                    <div className={`text-[10px] font-bold mt-0.5 ${
+                      coverage === 100 ? "text-emerald-600" : coverage >= 50 ? "text-amber-600" : "text-rose-500"
+                    }`}>{coverage}% {language === "en" ? "coverage" : "ครอบคลุม"}</div>
+                    {unmetered > 0 && (
+                      <div className="text-[10px] text-rose-500 font-semibold mt-0.5">
+                        {unmetered} {language === "en" ? "units without meter" : "ห้องยังไม่มีมิเตอร์"}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              <div className="rounded-xl p-3 border bg-slate-50 border-slate-200">
+                <div className="text-lg font-black">🏢</div>
+                <div className="font-bold text-slate-700 text-xs mt-1">{language === "en" ? "Total Units" : "ห้องทั้งหมด"}</div>
+                <div className="text-xl font-black text-slate-800 mt-0.5">{units.length}</div>
+                <div className="text-[10px] text-slate-500">{language === "en" ? "active units" : "ห้องที่ใช้งาน"}</div>
+              </div>
+              <div className="rounded-xl p-3 border bg-slate-50 border-slate-200">
+                <div className="text-lg font-black">📊</div>
+                <div className="font-bold text-slate-700 text-xs mt-1">{language === "en" ? "Registered Meters" : "มิเตอร์ที่ขึ้นทะเบียน"}</div>
+                <div className="text-xl font-black text-slate-800 mt-0.5">{meters.filter(m => m.meter_status === "ACTIVE").length}</div>
+                <div className="text-[10px] text-slate-500">{language === "en" ? "active meters" : "มิเตอร์ที่ใช้งาน"}</div>
+              </div>
+            </div>
+
+            {/* Zero-coverage guidance banner — shown when no real meters are registered */}
+            {meters.filter(m => m.meter_status === "ACTIVE").length === 0 && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex gap-3 items-start">
+                <span className="text-xl">⚠️</span>
+                <div>
+                  <div className="font-bold">{language === "en" ? "No meters registered yet" : "ยังไม่มีมิเตอร์ในระบบ"}</div>
+                  <div className="mt-1">
+                    {language === "en"
+                      ? "To register meters, go to the Import tab, download the XLSX template, fill in the actual physical meter serial numbers from your meter master list, then upload and confirm."
+                      : "หากต้องการขึ้นทะเบียนมิเตอร์ ให้ไปที่แท็บ Import เพื่อดาวน์โหลดแบบฟอร์ม XLSX จากนั้นกรอกเลขซีเรียลมิเตอร์จริงจากทะเบียนมิเตอร์ของโครงการ แล้วอัพโหลดและยืนยัน"}
+                  </div>
+                  <button
+                    onClick={() => setActiveTab("excel")}
+                    className="mt-2 px-3 py-1.5 bg-amber-600 text-white font-bold rounded-lg text-[11px] hover:bg-amber-700 transition"
+                  >
+                    → {language === "en" ? "Go to Import tab" : "ไปที่แท็บ Import"}
+                  </button>
+                </div>
+              </div>
+            )}
+
 
             <div className="bg-white dark:bg-slate-800 border rounded-xl overflow-hidden shadow-sm">
               <table className="w-full text-xs text-left">
@@ -2379,6 +2457,83 @@ export default function MeterManagementPage() {
           </div>
         </div>
       )}
+
+
+      {/* Modal: Bulk Import Guide — replaces the removed Batch Bootstrap modal */}
+      {showCoverageInfoPanel && (
+        <div className="fixed inset-0 bg-black/60 flex justify-center items-center p-4 z-50">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 max-w-lg w-full space-y-5 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">📋</span>
+              <div>
+                <h3 className="font-black text-slate-800 dark:text-white text-base">
+                  {language === "en" ? "Bulk Meter Registration via Import" : "การขึ้นทะเบียนมิเตอร์จำนวนมากผ่าน Import"}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {language === "en" ? "Step-by-step guide" : "ขั้นตอนการนำเข้าข้อมูล"}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs text-slate-700 dark:text-slate-300">
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px]">
+                ⚠️ {language === "en"
+                  ? "Meter serial numbers must be taken from your physical meter master list. The system does not generate or invent serial numbers."
+                  : "เลขซีเรียลมิเตอร์ต้องมาจากทะเบียนมิเตอร์จริงของโครงการเท่านั้น ระบบไม่สร้างหรือกำหนดเลขมิเตอร์ขึ้นมาเอง"}
+              </div>
+
+              <ol className="space-y-2 list-decimal list-inside">
+                <li>
+                  <span className="font-semibold">{language === "en" ? "Go to Import tab" : "ไปที่แท็บ Import"}</span>
+                  {" — "}{language === "en" ? "click the Import tab in the navigation above." : "คลิกที่แท็บ Import ด้านบน"}
+                </li>
+                <li>
+                  <span className="font-semibold">{language === "en" ? "Download XLSX template" : "ดาวน์โหลดแบบฟอร์ม XLSX"}</span>
+                  {" — "}{language === "en" ? "use the Export Template button to get the column structure." : "ใช้ปุ่ม Export Template เพื่อดาวน์โหลดโครงสร้างคอลัมน์"}
+                </li>
+                <li>
+                  <span className="font-semibold">{language === "en" ? "Fill in real serial numbers" : "กรอกเลขซีเรียลจริง"}</span>
+                  {" — "}{language === "en"
+                    ? "populate room_number, utility_type (WATER or ELECTRICITY), and meter_number from your physical meter master."
+                    : "กรอก room_number, utility_type (WATER หรือ ELECTRICITY) และ meter_number จากทะเบียนมิเตอร์จริง"}
+                </li>
+                <li>
+                  <span className="font-semibold">{language === "en" ? "Upload and preview" : "อัพโหลดและตรวจสอบ"}</span>
+                  {" — "}{language === "en" ? "the system will validate each row before import." : "ระบบจะตรวจสอบข้อมูลแต่ละแถวก่อนนำเข้า"}
+                </li>
+                <li>
+                  <span className="font-semibold">{language === "en" ? "Confirm import" : "ยืนยันการนำเข้า"}</span>
+                  {" — "}{language === "en" ? "only valid rows will be registered. Error rows are reported." : "เฉพาะแถวที่ถูกต้องจะถูกขึ้นทะเบียน แถวที่ผิดพลาดจะถูกรายงาน"}
+                </li>
+              </ol>
+
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600">
+                💡 {language === "en"
+                  ? "Rows with missing meter_number will be rejected. Duplicate serials and unknown room numbers will also be rejected. Units already metered are skipped (idempotent)."
+                  : "แถวที่ไม่มี meter_number จะถูกปฏิเสธ เลขซีเรียลซ้ำและเลขห้องที่ไม่รู้จักก็จะถูกปฏิเสธด้วย ห้องที่มีมิเตอร์แล้วจะถูกข้ามโดยอัตโนมัติ"}
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowCoverageInfoPanel(false)}
+                className="px-4 py-2 border rounded-xl text-slate-600 text-xs"
+              >
+                {language === "en" ? "Close" : "ปิด"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowCoverageInfoPanel(false); setActiveTab("excel"); }}
+                className="px-6 py-2 bg-slate-700 hover:bg-slate-800 text-white font-bold rounded-xl transition text-xs"
+              >
+                → {language === "en" ? "Go to Import tab" : "ไปที่แท็บ Import"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Modal: Utility Control Update */}
       {selectedUnitForControl && (
