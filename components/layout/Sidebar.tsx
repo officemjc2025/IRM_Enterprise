@@ -55,7 +55,7 @@ export default function Sidebar({
       items: [
         { id: "properties", label: language === "en" ? "Properties" : "โครงการ", href: "/properties", icon: IconProperty },
         { id: "units", label: language === "en" ? "Units" : "ห้องชุด", href: "/units", icon: IconProperty },
-        { id: "owners", label: language === "en" ? "Owners" : "เจ้าของร่วม", href: "/owners", icon: IconResidents },
+        { id: "owners", label: language === "en" ? "Owners" : "เจ้าของร่วม", href: "/ownerships", icon: IconResidents },
         { id: "persons", label: language === "en" ? "Persons" : "บุคคล", href: "/persons", icon: IconResidents },
         { id: "occupancies", label: language === "en" ? "Occupancies" : "การเข้าพัก", href: "/occupancies", icon: IconRental },
       ].filter(() => ["super_admin", "admin", "property_admin"].includes(role || ""))

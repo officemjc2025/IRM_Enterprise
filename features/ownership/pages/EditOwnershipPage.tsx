@@ -156,7 +156,7 @@ export default function EditOwnershipPage({ params }: EditOwnershipProps) {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">Ownership Percentage (%) *</label>
+                  <label className="block text-sm font-medium mb-1">Owner Legal Share (%) *</label>
                   <input
                     type="number"
                     min={0}

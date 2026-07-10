@@ -1,5 +1,5 @@
-import { OwnerListPage } from "@/features/owner/pages";
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <OwnerListPage />;
+  redirect("/ownerships");
 }

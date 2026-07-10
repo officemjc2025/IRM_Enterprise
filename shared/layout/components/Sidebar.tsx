@@ -85,7 +85,7 @@ export function Sidebar({ onClose, collapsed, setCollapsed }: SidebarProps) {
         items: [
           { id: "properties", label: t.menu.properties, href: "/properties", icon: IconProperty },
           { id: "units", label: t.menu.units, href: "/units", icon: IconProperty },
-          { id: "owners", label: t.menu.owners, href: "/owners", icon: IconResidents },
+          { id: "owners", label: t.menu.owners, href: "/ownerships", icon: IconResidents },
           { id: "persons", label: t.menu.persons, href: "/persons", icon: IconResidents },
           { id: "occupancies", label: t.menu.occupancies, href: "/occupancies", icon: IconRental },
         ]

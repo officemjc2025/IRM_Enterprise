@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Ownership } from "../types/ownership.types";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { PageHeader } from "@/shared/ui";
+import { formatOwnershipRatio } from "@/shared/utils/unit";
 
 interface ViewOwnershipProps {
   params: Promise<{ id: string }>;
@@ -76,6 +77,12 @@ export default function ViewOwnershipPage({ params }: ViewOwnershipProps) {
                       <span className="font-semibold">{ownership.unit.unit_number}</span>
                     </div>
                     <div>
+                      <span className="block font-medium text-slate-400">Unit Ownership Ratio</span>
+                      <span className="font-mono font-semibold text-slate-700 dark:text-slate-200">
+                        {formatOwnershipRatio(ownership.unit.ownership_ratio)}
+                      </span>
+                    </div>
+                    <div>
                       <span className="block font-medium text-slate-400">Floor</span>
                       <span>{ownership.unit.floor}</span>
                     </div>
@@ -128,9 +135,11 @@ export default function ViewOwnershipPage({ params }: ViewOwnershipProps) {
                 <h3 className="font-semibold text-lg mb-3">Ownership Details</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                   <div>
-                    <span className="block font-medium text-slate-400">Ownership Ratio</span>
+                    <span className="block font-medium text-slate-400">Owner Legal Share</span>
                     <span className="font-mono text-base font-bold text-indigo-600 dark:text-indigo-400">
-                      {ownership.ownership_percentage}%
+                      {ownership.ownership_percentage !== null && ownership.ownership_percentage !== undefined
+                        ? `${Number(ownership.ownership_percentage).toFixed(2)}%`
+                        : "-"}
                     </span>
                   </div>
                   <div>

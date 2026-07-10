@@ -7,12 +7,13 @@ import { Ownership } from "../types/ownership.types";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { useDebounce, usePagination, useSorting, useFilter } from "../hooks";
 import { PageHeader, SearchInput, EmptyState, LoadingState } from "@/shared/ui";
-import { compareUnitNumbers } from "@/shared/utils/unit";
+import { compareUnitNumbers, formatOwnershipRatio } from "@/shared/utils/unit";
 
 function OwnershipListInner() {
   const { t, language } = useLanguage();
   const [ownerships, setOwnerships] = useState<Ownership[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
@@ -21,22 +22,43 @@ function OwnershipListInner() {
 
   const fetchOwnerships = async () => {
     try {
+      setLoading(true);
+      setError(null);
       const res = await fetch("/api/v1/ownerships");
+
+      if (!res.ok) {
+        const contentType = res.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+          throw new Error(language === "en" ? `Server error: ${res.statusText} (${res.status})` : `เกิดข้อผิดพลาดของเซิร์ฟเวอร์: ${res.statusText} (${res.status})`);
+        }
+        const errJson = await res.json();
+        throw new Error(errJson.message || (language === "en" ? "Failed to fetch ownerships" : "ไม่สามารถโหลดข้อมูลสิทธิ์การเป็นเจ้าของได้"));
+      }
+
+      const contentType = res.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        throw new Error(language === "en" ? "Invalid response format from server" : "รูปแบบการตอบกลับจากเซิร์ฟเวอร์ไม่ถูกต้อง");
+      }
+
       const json = await res.json();
       if (json.success) {
         setOwnerships(json.data);
+      } else {
+        throw new Error(json.message || (language === "en" ? "Failed to fetch ownerships" : "ไม่สามารถโหลดข้อมูลสิทธิ์การเป็นเจ้าของได้"));
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    queueMicrotask(() => {
-      fetchOwnerships();
-    });
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchOwnerships();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDelete = async (id: string) => {
@@ -79,7 +101,16 @@ function OwnershipListInner() {
   });
 
   // 3. Sort Step
+  const isCurrentAssignment = (o: Ownership) => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    const isActive = o.status === "ACTIVE";
+    const started = !o.start_date || o.start_date <= todayStr;
+    const notEnded = !o.end_date || o.end_date >= todayStr;
+    return isActive && started && notEnded;
+  };
+
   const sortedOwnerships = [...filteredOwnerships].sort((a, b) => {
+    // Primary sort by unit number (canonical natural numeric sort)
     if (sortBy === "unit_id") {
       const cmp = compareUnitNumbers(a.unit?.unit_number, b.unit?.unit_number);
       return sortOrder === "asc" ? cmp : -cmp;
@@ -97,24 +128,36 @@ function OwnershipListInner() {
     } else if (sortBy === "ownership_type") {
       valA = a.ownership_type || "";
       valB = b.ownership_type || "";
+    } else if (sortBy === "unit_ownership_ratio") {
+      valA = a.unit?.ownership_ratio || 0;
+      valB = b.unit?.ownership_ratio || 0;
+    } else if (sortBy === "start_date") {
+      valA = a.start_date || "";
+      valB = b.start_date || "";
+    } else if (sortBy === "end_date") {
+      valA = a.end_date || "";
+      valB = b.end_date || "";
     } else if (sortBy === "status") {
-      valA = a.status || "";
-      valB = b.status || "";
+      valA = isCurrentAssignment(a) ? 1 : 0;
+      valB = isCurrentAssignment(b) ? 1 : 0;
     } else {
       valA = a[sortBy as keyof Ownership] ?? "";
       valB = b[sortBy as keyof Ownership] ?? "";
     }
 
+    let primary = 0;
     if (typeof valA === "number" && typeof valB === "number") {
-      return sortOrder === "asc" ? valA - valB : valB - valA;
+      primary = sortOrder === "asc" ? valA - valB : valB - valA;
+    } else {
+      const strA = String(valA).toLowerCase();
+      const strB = String(valB).toLowerCase();
+      if (strA < strB) primary = sortOrder === "asc" ? -1 : 1;
+      else if (strA > strB) primary = sortOrder === "asc" ? 1 : -1;
     }
 
-    const strA = String(valA).toLowerCase();
-    const strB = String(valB).toLowerCase();
-
-    if (strA < strB) return sortOrder === "asc" ? -1 : 1;
-    if (strA > strB) return sortOrder === "asc" ? 1 : -1;
-    return 0;
+    // Secondary sort: always apply canonical natural unit-number order as tie-breaker
+    if (primary !== 0) return primary;
+    return compareUnitNumbers(a.unit?.unit_number, b.unit?.unit_number);
   });
 
   // 4. Pagination Step
@@ -185,6 +228,16 @@ function OwnershipListInner() {
         <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden">
           {loading ? (
             <LoadingState message={t.common.loading} />
+          ) : error ? (
+            <div className="p-6 text-center">
+              <p className="text-red-500 dark:text-red-400 mb-4">{error}</p>
+              <button
+                onClick={fetchOwnerships}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition"
+              >
+                {language === "en" ? "Retry" : "ลองใหม่"}
+              </button>
+            </div>
           ) : paginatedOwnerships.length === 0 ? (
             <EmptyState message={language === "en" ? "No ownership records found." : "ไม่พบข้อมูลการเป็นเจ้าของ"} />
           ) : (
@@ -192,13 +245,13 @@ function OwnershipListInner() {
               <thead>
                 <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-sm">
                   {renderSortableHeader(language === "en" ? "Unit Number" : "เลขยูนิต", "unit_id")}
+                  {renderSortableHeader(language === "en" ? "Unit Ownership Ratio" : "สัดส่วนกรรมสิทธิ์ยูนิต", "unit_ownership_ratio")}
                   {renderSortableHeader(language === "en" ? "Owner Name" : "ชื่อเจ้าของ", "person_id")}
-                  {renderSortableHeader(language === "en" ? "Ownership %" : "สัดส่วน %", "ownership_percentage")}
                   {renderSortableHeader(language === "en" ? "Ownership Type" : "ประเภทสิทธิ์", "ownership_type")}
-                  <th className="p-4 font-semibold text-slate-600 dark:text-slate-300">
-                    {language === "en" ? "Start Date" : "วันที่เริ่มต้น"}
-                  </th>
-                  {renderSortableHeader(t.common.status, "status")}
+                  {renderSortableHeader(language === "en" ? "Owner Legal Share" : "สัดส่วน % (เจ้าของ)", "ownership_percentage")}
+                  {renderSortableHeader(language === "en" ? "Effective From" : "มีผลตั้งแต่วันที่", "start_date")}
+                  {renderSortableHeader(language === "en" ? "Effective To" : "มีผลถึงวันที่", "end_date")}
+                  {renderSortableHeader(language === "en" ? "Assignment Status" : "สถานะสิทธิ์", "status")}
                   <th className="p-4 text-right font-semibold text-slate-600 dark:text-slate-300">
                     {t.common.actions}
                   </th>
@@ -216,28 +269,44 @@ function OwnershipListInner() {
                         "-"
                       )}
                     </td>
+                    <td className="p-4 font-mono">
+                      {o.unit ? formatOwnershipRatio(o.unit.ownership_ratio) : "0.00"}
+                    </td>
                     <td className="p-4 font-medium">
                       {o.person ? (
                         <Link href={`/persons/${o.person.id}`} className="text-indigo-600 dark:text-indigo-400 hover:underline">
-                          {o.person.display_name || `${o.person.first_name} ${o.person.last_name}`}
+                          {o.person.display_name?.trim() ||
+                           `${o.person.first_name || ""} ${o.person.last_name || ""}`.trim() ||
+                           (language === "en" ? "Owner name not found" : "ไม่พบชื่อเจ้าของ")}
                         </Link>
                       ) : (
-                        "-"
+                        <span className="text-slate-400 dark:text-slate-500 font-normal">
+                          {language === "en" ? "Owner name not found" : "ไม่พบชื่อเจ้าของ"}
+                        </span>
                       )}
                     </td>
-                    <td className="p-4 font-mono">{o.ownership_percentage}%</td>
                     <td className="p-4">
                       <span className="px-2 py-1 rounded bg-slate-100 dark:bg-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-300">
                         {o.ownership_type}
                       </span>
                     </td>
-                    <td className="p-4 text-slate-500">{o.start_date}</td>
+                    <td className="p-4 font-mono">
+                      {o.ownership_percentage !== null && o.ownership_percentage !== undefined
+                        ? `${Number(o.ownership_percentage).toFixed(2)}%`
+                        : "-"}
+                    </td>
+                    <td className="p-4 text-slate-500">{o.start_date || "-"}</td>
+                    <td className="p-4 text-slate-500">{o.end_date || "Present"}</td>
                     <td className="p-4">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                        o.status === "ACTIVE" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                      }`}>
-                        {o.status}
-                      </span>
+                      {isCurrentAssignment(o) ? (
+                        <span className="px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                          {language === "en" ? "CURRENT" : "ปัจจุบัน"}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-400">
+                          {language === "en" ? "HISTORICAL" : "ประวัติ"}
+                        </span>
+                      )}
                     </td>
                     <td className="p-4 text-right space-x-2">
                       <Link
