@@ -535,6 +535,60 @@ export async function POST(request: Request) {
     }
 
     if (moduleName === "occupancy") {
+      const isWorkbookImport = payload.length > 0 && (payload[0].unit_number !== undefined || importStrategy === "dry_run" || importStrategy === "commit");
+
+      if (isWorkbookImport) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+        }
+
+        const strategy = importStrategy || "dry_run";
+        const dryRun = strategy === "dry_run";
+
+        const { data: importResult, error: importError } = await supabase.rpc(
+          "import_occupancies",
+          {
+            p_rows: payload,
+            p_actor_id: user.id,
+            p_dry_run: dryRun
+          }
+        );
+
+        if (importError) {
+          console.error("Occupancy spreadsheet import failed:", importError);
+          return NextResponse.json({
+            success: false,
+            message: `Occupancy import failed: ${importError.message}`,
+            summary: {
+              inserted: 0,
+              updated: 0,
+              skipped: 0,
+              errors: payload.length,
+              elapsedTime: ((Date.now() - startTime) / 1000).toFixed(2) + "s",
+            }
+          }, { status: 400 });
+        }
+
+        const elapsed = Date.now() - startTime;
+        return NextResponse.json({
+          success: importResult.success,
+          isDryRun: dryRun,
+          message: dryRun
+            ? "✔ Dry run simulation completed successfully. Zero database writes performed."
+            : "✔ Occupancy import completed successfully",
+          summary: {
+            inserted: importResult.summary?.occupancies_created || 0,
+            updated: importResult.summary?.occupancies_updated || 0,
+            skipped: (importResult.summary?.totalRows || payload.length) - ((importResult.summary?.occupancies_created || 0) + (importResult.summary?.occupancies_updated || 0)),
+            errors: importResult.summary?.errorRows || 0,
+            elapsedTime: (elapsed / 1000).toFixed(2) + "s",
+          },
+          results: importResult.results || [],
+          previewStats: importResult.previewStats || {}
+        });
+      }
+
       // 1. Business Validation (all-or-nothing check before any DB write)
       for (const item of payload) {
         if (!item.unit_id || String(item.unit_id).trim() === "") {

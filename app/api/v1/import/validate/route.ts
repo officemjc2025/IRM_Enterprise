@@ -3,6 +3,23 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ValidationError } from "@/features/import/types/import.types";
 
+function normalizePhone(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return null;
+
+  if (digits.startsWith("66") && digits.length === 11) {
+    return "0" + digits.substring(2);
+  }
+  if (digits.startsWith("66") && digits.length === 10) {
+    return "0" + digits.substring(2);
+  }
+  if (digits.length === 9 && (digits.startsWith("8") || digits.startsWith("9") || digits.startsWith("6"))) {
+    return "0" + digits;
+  }
+  return digits;
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -344,6 +361,181 @@ export async function POST(request: Request) {
         }
       }
 
+      if (moduleName === "occupancy") {
+        const uNum = String(normalizedData.unit_number || "").trim().toUpperCase();
+        const fullName = String(normalizedData.full_name || "").trim();
+        const occType = String(normalizedData.occupancy_type || "").trim().toUpperCase();
+        const moveInStr = String(normalizedData.move_in_date || "").trim();
+        const moveOutStr = String(normalizedData.move_out_date || "").trim();
+        const phone = String(normalizedData.phone || "").trim();
+        const email = String(normalizedData.email || "").trim().toLowerCase();
+
+        // Required field validations
+        if (!fullName) {
+          errors.push({
+            rowNumber,
+            column: reverseMapping.full_name || "full_name",
+            message: "Full Name is required",
+            severity: "error"
+          });
+        }
+
+        if (!occType) {
+          errors.push({
+            rowNumber,
+            column: reverseMapping.occupancy_type || "occupancy_type",
+            message: "Occupancy Type is required",
+            severity: "error"
+          });
+        } else {
+          const validTypes = ["OWNER", "CO_OWNER", "FAMILY_MEMBER", "TENANT", "RESIDENT", "STAFF", "COMPANY"];
+          if (!validTypes.includes(occType)) {
+            errors.push({
+              rowNumber,
+              column: reverseMapping.occupancy_type || "occupancy_type",
+              message: `Occupancy type must be one of: ${validTypes.join(", ")}`,
+              severity: "error"
+            });
+          }
+        }
+
+        if (!moveInStr) {
+          errors.push({
+            rowNumber,
+            column: reverseMapping.move_in_date || "move_in_date",
+            message: "Move-in date is required",
+            severity: "error"
+          });
+        } else if (isNaN(Date.parse(moveInStr))) {
+          errors.push({
+            rowNumber,
+            column: reverseMapping.move_in_date || "move_in_date",
+            message: "Invalid move-in date format",
+            severity: "error"
+          });
+        }
+
+        if (moveOutStr && isNaN(Date.parse(moveOutStr))) {
+          errors.push({
+            rowNumber,
+            column: reverseMapping.move_out_date || "move_out_date",
+            message: "Invalid move-out date format",
+            severity: "error"
+          });
+        }
+
+        if (moveInStr && moveOutStr && !isNaN(Date.parse(moveInStr)) && !isNaN(Date.parse(moveOutStr))) {
+          if (new Date(moveOutStr) < new Date(moveInStr)) {
+            errors.push({
+              rowNumber,
+              column: reverseMapping.move_out_date || "move_out_date",
+              message: "Move-out date cannot be earlier than move-in date",
+              severity: "error"
+            });
+          }
+        }
+
+        // Unit existence check
+        let resolvedUnitId = "";
+        if (uNum && normalizedData.property_id) {
+          const uKey = `${normalizedData.property_id}:${uNum}`;
+          const existingUnit = dbUnitsMap.get(uKey);
+          if (!existingUnit) {
+            errors.push({
+              rowNumber,
+              column: reverseMapping.unit_number || "unit_number",
+              message: `Unit number '${uNum}' not found in database`,
+              severity: "error"
+            });
+          } else {
+            resolvedUnitId = existingUnit.id;
+          }
+        }
+
+        // Person Resolution
+        let resolvedPersonId = "";
+
+        // Try matching by email
+        if (email) {
+          const found = dbPersons?.find(p => p.email && p.email.trim().toLowerCase() === email);
+          if (found) {
+            resolvedPersonId = found.id;
+          }
+        }
+
+        // Try matching by phone
+        if (phone && !resolvedPersonId) {
+          const normPhone = normalizePhone(phone);
+          const found = dbPersons?.find(p => p.phone && normalizePhone(p.phone) === normPhone);
+          if (found) {
+            resolvedPersonId = found.id;
+          }
+        }
+
+        // Check cross match ambiguity
+        if (email && phone) {
+          const emailMatch = dbPersons?.find(p => p.email && p.email.trim().toLowerCase() === email);
+          const normPhone = normalizePhone(phone);
+          const phoneMatch = dbPersons?.find(p => p.phone && normalizePhone(p.phone) === normPhone);
+          if (emailMatch && phoneMatch && emailMatch.id !== phoneMatch.id) {
+            errors.push({
+              rowNumber,
+              column: reverseMapping.full_name || "full_name",
+              message: `Ambiguous occupant profile: email matches Person '${emailMatch.first_name}' but phone matches Person '${phoneMatch.first_name}'`,
+              severity: "error"
+            });
+          }
+        }
+
+        if (resolvedPersonId) {
+          const personRow = dbPersons?.find(p => p.id === resolvedPersonId);
+          errors.push({
+            rowNumber,
+            column: reverseMapping.full_name || "full_name",
+            message: `Matches existing person '${personRow?.first_name} ${personRow?.last_name || ""}' in database`,
+            severity: "warning"
+          });
+        } else if (fullName) {
+          errors.push({
+            rowNumber,
+            column: reverseMapping.full_name || "full_name",
+            message: `New occupant profile will be created: '${fullName}'`,
+            severity: "warning"
+          });
+        }
+
+        // Check existing equivalent active assignment
+        if (resolvedUnitId && resolvedPersonId && occType) {
+          const occKey = `${resolvedUnitId}:${resolvedPersonId}`;
+          const existingOcc = dbActiveOccupanciesMap.get(occKey);
+          if (existingOcc && existingOcc.occupancy_type === occType) {
+            errors.push({
+              rowNumber,
+              column: reverseMapping.unit_number || "unit_number",
+              message: "Active equivalent assignment already exists in database (skipped)",
+              severity: "warning"
+            });
+          }
+        }
+
+        // Excel duplicate identical assignment row check
+        const dupRows = rows.map((r, idx) => ({ idx: idx + 2, r })).filter(x => {
+          const rowUnit = String(x.r[reverseMapping.unit_number || "UNIT_NUMBER"] || "").trim().toUpperCase();
+          const rowName = String(x.r[reverseMapping.full_name || "FULL_NAME"] || "").trim();
+          const rowType = String(x.r[reverseMapping.occupancy_type || "OCCUPANCY_TYPE"] || "").trim().toUpperCase();
+          return rowUnit === uNum && rowName === fullName && rowType === occType;
+        });
+
+        if (dupRows.length > 1) {
+          errors.push({
+            rowNumber,
+            column: reverseMapping.unit_number || "unit_number",
+            message: `Duplicate identical assignment row detected in workbook (rows: ${dupRows.map(x => x.idx).join(", ")})`,
+            severity: "error"
+          });
+        }
+      }
+
       results.push({
         rowNumber,
         normalizedData,
@@ -353,39 +545,41 @@ export async function POST(request: Request) {
       allErrors.push(...errors);
     });
 
-    // Excel duplicate unit numbers checks
-    Object.entries(unitNumberTracker).forEach(([unitNum, rowsWithUnit]) => {
-      if (rowsWithUnit.length > 1) {
-        rowsWithUnit.forEach(rowNum => {
-          const dupError: ValidationError = {
-            rowNumber: rowNum,
-            column: reverseMapping.unit_number || "unit_number",
-            message: `Duplicate unit number '${unitNum}' detected in rows: ${rowsWithUnit.join(", ")}`,
-            severity: "error"
-          };
-          const rowRes = results.find(r => r.rowNumber === rowNum);
-          rowRes?.errors.push(dupError);
-          allErrors.push(dupError);
-        });
-      }
-    });
+    if (moduleName !== "occupancy") {
+      // Excel duplicate unit numbers checks
+      Object.entries(unitNumberTracker).forEach(([unitNum, rowsWithUnit]) => {
+        if (rowsWithUnit.length > 1) {
+          rowsWithUnit.forEach(rowNum => {
+            const dupError: ValidationError = {
+              rowNumber: rowNum,
+              column: reverseMapping.unit_number || "unit_number",
+              message: `Duplicate unit number '${unitNum}' detected in rows: ${rowsWithUnit.join(", ")}`,
+              severity: "error"
+            };
+            const rowRes = results.find(r => r.rowNumber === rowNum);
+            rowRes?.errors.push(dupError);
+            allErrors.push(dupError);
+          });
+        }
+      });
 
-    // Excel duplicate RoomID checks
-    Object.entries(roomIdTracker).forEach(([rid, rowsWithRid]) => {
-      if (rowsWithRid.length > 1) {
-        rowsWithRid.forEach(rowNum => {
-          const dupError: ValidationError = {
-            rowNumber: rowNum,
-            column: reverseMapping.remark || "remark",
-            message: `Duplicate RoomID '${rid}' detected in rows: ${rowsWithRid.join(", ")}`,
-            severity: "error"
-          };
-          const rowRes = results.find(r => r.rowNumber === rowNum);
-          rowRes?.errors.push(dupError);
-          allErrors.push(dupError);
-        });
-      }
-    });
+      // Excel duplicate RoomID checks
+      Object.entries(roomIdTracker).forEach(([rid, rowsWithRid]) => {
+        if (rowsWithRid.length > 1) {
+          rowsWithRid.forEach(rowNum => {
+            const dupError: ValidationError = {
+              rowNumber: rowNum,
+              column: reverseMapping.remark || "remark",
+              message: `Duplicate RoomID '${rid}' detected in rows: ${rowsWithRid.join(", ")}`,
+              severity: "error"
+            };
+            const rowRes = results.find(r => r.rowNumber === rowNum);
+            rowRes?.errors.push(dupError);
+            allErrors.push(dupError);
+          });
+        }
+      });
+    }
 
     // Sort all errors
     allErrors.sort((a, b) => a.rowNumber - b.rowNumber);
@@ -417,7 +611,7 @@ export async function POST(request: Request) {
 
       // 3. Resident
       let rScore = 0;
-      if (data.resident_name || data.owner_name) {
+      if (data.resident_name || data.owner_name || data.full_name) {
         rScore = 100;
       }
       residentSum += rScore;
@@ -448,118 +642,163 @@ export async function POST(request: Request) {
     let metersCreate = 0;
     let metersUpdate = 0;
 
-    results.forEach(res => {
-      const data = res.normalizedData;
+    if (moduleName === "occupancy") {
+      results.forEach(res => {
+        const data = res.normalizedData;
+        const propIdVal = data.property_id;
+        const unitNumVal = data.unit_number;
+        if (!unitNumVal || !propIdVal) return;
 
-      const propIdVal = data.property_id;
-      const unitNumVal = data.unit_number;
-      if (!unitNumVal || !propIdVal) return;
+        const unitKey = `${propIdVal}:${unitNumVal.toUpperCase()}`;
+        const existingUnit = dbUnitsMap.get(unitKey);
+        if (!existingUnit) return;
 
-      const unitKey = `${propIdVal}:${unitNumVal.toUpperCase()}`;
-      const existingUnit = dbUnitsMap.get(unitKey);
+        const uId = existingUnit.id;
 
-      // Unit preview
-      if (existingUnit) {
-        const hasChanged =
-          existingUnit.floor !== (data.floor || "") ||
-          Number(existingUnit.area) !== Number(data.area || 0) ||
-          Number(existingUnit.ownership_ratio) !== Number(data.ownership_ratio || 0);
-        if (hasChanged) {
-          unitsUpdate++;
+        // Resolve person
+        const email = String(data.email || "").trim().toLowerCase();
+        const phone = String(data.phone || "").trim();
+        let personId = "";
+        if (email) {
+          const found = dbPersons?.find(p => p.email && p.email.trim().toLowerCase() === email);
+          if (found) personId = found.id;
         }
-      } else {
-        unitsCreate++;
-      }
+        if (phone && !personId) {
+          const normPhone = normalizePhone(phone);
+          const found = dbPersons?.find(p => p.phone && normalizePhone(p.phone) === normPhone);
+          if (found) personId = found.id;
+        }
 
-      // Person preview
-      const ownerName = String(data.owner_name || "").trim();
-      let personId = "";
-      if (ownerName) {
-        const parts = ownerName.split(/\s+/);
-        const firstName = parts[0] || "";
-        const lastName = parts.slice(1).join(" ") || "-";
-        const personKey = `${firstName.toUpperCase()}::${lastName.toUpperCase()}`;
-        const foundPerson = dbPersonsByName.get(personKey);
-        if (foundPerson) {
-          personId = foundPerson.id;
+        if (personId) {
           personsMatch++;
-        } else {
-          personsCreate++;
-        }
-      }
-
-      // Owner assignments preview
-      if (unitNumVal) {
-        const uId = existingUnit?.id || "";
-        // Resolve preview status for ownership/occupancy domain decisions
-        const previewRawStatus = String(data.occupancy_type || data.status || "").trim().toUpperCase().replace(/[\s\-]+/g, "_");
-        const isNoOwnership = ["MAINTENANCE", "OUT_OF_SERVICE", "LOCKED", "STAFF"].includes(previewRawStatus);
-        const isNoOccupancy = ["VACANT", "MAINTENANCE", "OUT_OF_SERVICE", "LOCKED"].includes(previewRawStatus);
-        const previewOwnerType = previewRawStatus === "MJC" || previewRawStatus === "DEVELOPER" ? "DEVELOPER" : "OWNER";
-        const previewOccupancyType = previewRawStatus === "MJC" || previewRawStatus === "DEVELOPER" ? "COMPANY" :
-          previewRawStatus === "TENANT" || previewRawStatus === "TENANT_OCCUPIED" ? "TENANT" :
-          previewRawStatus === "STAFF" ? "STAFF" : "OWNER";
-
-        // If this status suppresses ownership, skip ownership preview
-        if (!isNoOwnership) {
-          const ownKey = `${uId}:${personId}`;
-          const existingOwn = personId && uId ? dbActiveOwnershipsMap.get(ownKey) : null;
-          if (existingOwn) {
-            const ratioPercent = Number(data.ownership_ratio || 100);
-            if (Number(existingOwn.ownership_percent) !== ratioPercent || existingOwn.ownership_type !== previewOwnerType) {
-              ownershipsUpdate++;
+          const occKey = `${uId}:${personId}`;
+          const existingOcc = dbActiveOccupanciesMap.get(occKey);
+          if (existingOcc) {
+            if (existingOcc.occupancy_type !== data.occupancy_type) {
+              occupanciesUpdate++;
             }
-          } else if (ownerName) {
-            ownershipsCreate++;
-          }
-
-          // Occupancies preview (within ownership block)
-          if (!isNoOccupancy) {
-            const existingOcc = personId && uId ? dbActiveOccupanciesMap.get(ownKey) : null;
-            if (existingOcc) {
-              if (existingOcc.occupancy_type !== previewOccupancyType) {
-                occupanciesUpdate++;
-              }
-            } else if (ownerName) {
-              occupanciesCreate++;
-            }
-          }
-        } else if (previewRawStatus === "STAFF" && ownerName) {
-          // STAFF: occupancy only (no ownership)
-          const staffOccKey = `${uId}:${personId}`;
-          const existingStaffOcc = personId && uId ? dbActiveOccupanciesMap.get(staffOccKey) : null;
-          if (existingStaffOcc) {
-            if (existingStaffOcc.occupancy_type !== "STAFF") occupanciesUpdate++;
           } else {
             occupanciesCreate++;
           }
+        } else {
+          personsCreate++;
+          occupanciesCreate++;
+        }
+      });
+    } else {
+      results.forEach(res => {
+        const data = res.normalizedData;
+
+        const propIdVal = data.property_id;
+        const unitNumVal = data.unit_number;
+        if (!unitNumVal || !propIdVal) return;
+
+        const unitKey = `${propIdVal}:${unitNumVal.toUpperCase()}`;
+        const existingUnit = dbUnitsMap.get(unitKey);
+
+        // Unit preview
+        if (existingUnit) {
+          const hasChanged =
+            existingUnit.floor !== (data.floor || "") ||
+            Number(existingUnit.area) !== Number(data.area || 0) ||
+            Number(existingUnit.ownership_ratio) !== Number(data.ownership_ratio || 0);
+          if (hasChanged) {
+            unitsUpdate++;
+          }
+        } else {
+          unitsCreate++;
         }
 
-        // Meters preview
-        if (data.water_meter) {
-          const meterKey = `${uId}:WATER`;
-          const existingMeterVal = dbActiveMetersMap.get(meterKey);
-          if (existingMeterVal) {
-            if (existingMeterVal !== String(data.water_meter)) {
-              metersUpdate++;
-            }
+        // Person preview
+        const ownerName = String(data.owner_name || "").trim();
+        let personId = "";
+        if (ownerName) {
+          const parts = ownerName.split(/\s+/);
+          const firstName = parts[0] || "";
+          const lastName = parts.slice(1).join(" ") || "-";
+          const personKey = `${firstName.toUpperCase()}::${lastName.toUpperCase()}`;
+          const foundPerson = dbPersonsByName.get(personKey);
+          if (foundPerson) {
+            personId = foundPerson.id;
+            personsMatch++;
           } else {
-            metersCreate++;
+            personsCreate++;
           }
         }
-        if (data.electricity_meter) {
-          const meterKey = `${uId}:ELECTRICITY`;
-          const existingMeterVal = dbActiveMetersMap.get(meterKey);
-          if (existingMeterVal) {
-            if (existingMeterVal !== String(data.electricity_meter)) {
-              metersUpdate++;
+
+        // Owner assignments preview
+        if (unitNumVal) {
+          const uId = existingUnit?.id || "";
+          // Resolve preview status for ownership/occupancy domain decisions
+          const previewRawStatus = String(data.occupancy_type || data.status || "").trim().toUpperCase().replace(/[\s\-]+/g, "_");
+          const isNoOwnership = ["MAINTENANCE", "OUT_OF_SERVICE", "LOCKED", "STAFF"].includes(previewRawStatus);
+          const isNoOccupancy = ["VACANT", "MAINTENANCE", "OUT_OF_SERVICE", "LOCKED"].includes(previewRawStatus);
+          const previewOwnerType = previewRawStatus === "MJC" || previewRawStatus === "DEVELOPER" ? "DEVELOPER" : "OWNER";
+          const previewOccupancyType = previewRawStatus === "MJC" || previewRawStatus === "DEVELOPER" ? "COMPANY" :
+            previewRawStatus === "TENANT" || previewRawStatus === "TENANT_OCCUPIED" ? "TENANT" :
+            previewRawStatus === "STAFF" ? "STAFF" : "OWNER";
+
+          // If this status suppresses ownership, skip ownership preview
+          if (!isNoOwnership) {
+            const ownKey = `${uId}:${personId}`;
+            const existingOwn = personId && uId ? dbActiveOwnershipsMap.get(ownKey) : null;
+            if (existingOwn) {
+              const ratioPercent = Number(data.ownership_ratio || 100);
+              if (Number(existingOwn.ownership_percent) !== ratioPercent || existingOwn.ownership_type !== previewOwnerType) {
+                ownershipsUpdate++;
+              }
+            } else if (ownerName) {
+              ownershipsCreate++;
             }
-          } else {
-            metersCreate++;
+
+            // Occupancies preview (within ownership block)
+            if (!isNoOccupancy) {
+              const existingOcc = personId && uId ? dbActiveOccupanciesMap.get(ownKey) : null;
+              if (existingOcc) {
+                if (existingOcc.occupancy_type !== previewOccupancyType) {
+                  occupanciesUpdate++;
+                }
+              } else if (ownerName) {
+                occupanciesCreate++;
+              }
+            }
+          } else if (previewRawStatus === "STAFF" && ownerName) {
+            // STAFF: occupancy only (no ownership)
+            const staffOccKey = `${uId}:${personId}`;
+            const existingStaffOcc = personId && uId ? dbActiveOccupanciesMap.get(staffOccKey) : null;
+            if (existingStaffOcc) {
+              if (existingStaffOcc.occupancy_type !== "STAFF") occupanciesUpdate++;
+            } else {
+              occupanciesCreate++;
+            }
+          }
+
+          // Meters preview
+          if (data.water_meter) {
+            const meterKey = `${uId}:WATER`;
+            const existingMeterVal = dbActiveMetersMap.get(meterKey);
+            if (existingMeterVal) {
+              if (existingMeterVal !== String(data.water_meter)) {
+                metersUpdate++;
+              }
+            } else {
+              metersCreate++;
+            }
+          }
+          if (data.electricity_meter) {
+            const meterKey = `${uId}:ELECTRICITY`;
+            const existingMeterVal = dbActiveMetersMap.get(meterKey);
+            if (existingMeterVal) {
+              if (existingMeterVal !== String(data.electricity_meter)) {
+                metersUpdate++;
+              }
+            } else {
+              metersCreate++;
+            }
           }
         }
-      }
-    });
+      });
+    }
 
     const previewStats = {
       units: { create: unitsCreate, update: unitsUpdate, match: 0 },

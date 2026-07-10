@@ -218,7 +218,7 @@ export default function OccupancyListPage() {
               ))}
               <button
                 disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((c) => c - 1)}
+                onClick={() => setCurrentPage((c) => c + 1)}
                 className="px-3 py-1 border border-slate-200 dark:border-slate-700 rounded-lg disabled:opacity-50"
               >
                 {t.common.next}
