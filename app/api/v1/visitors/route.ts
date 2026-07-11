@@ -38,22 +38,23 @@ export async function GET(request: Request) {
 
     // Security check: Residents can only view their own visitor requests
     if (!isAdmin) {
-      // Find person
-      const { data: person } = await supabase
-        .from("persons")
-        .select("id")
-        .eq("email", user.email)
-        .is("deleted_at", null)
-        .maybeSingle();
+      // Find person via profile link
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("person_id")
+        .eq("id", user.id)
+        .single();
 
-      if (!person) {
+      const personId = prof?.person_id;
+
+      if (!personId) {
         visitors = [];
       } else {
         // Find resident assignments
         const { data: assignments } = await supabase
           .from("resident_assignments")
           .select("id")
-          .eq("person_id", person.id);
+          .eq("person_id", personId);
 
         const assignmentIds = (assignments || []).map((a) => a.id);
         
@@ -101,16 +102,17 @@ export async function POST(request: Request) {
     const isAdmin = profile && (profile.role === "admin" || profile.role === "super_admin" || profile.role === "property_admin");
 
     if (!isAdmin) {
-      const { data: person } = await supabase
-        .from("persons")
-        .select("id")
-        .eq("email", user.email)
-        .is("deleted_at", null)
-        .maybeSingle();
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("person_id")
+        .eq("id", user.id)
+        .single();
 
-      if (!person) {
+      const personId = prof?.person_id;
+
+      if (!personId) {
         return NextResponse.json(
-          { success: false, message: "Resident profile not found" },
+          { success: false, message: "Resident profile not linked to a registered person" },
           { status: 400 }
         );
       }
@@ -119,7 +121,7 @@ export async function POST(request: Request) {
         .from("resident_assignments")
         .select("id")
         .eq("id", body.resident_assignment_id)
-        .eq("person_id", person.id)
+        .eq("person_id", personId)
         .maybeSingle();
 
       if (!assignment) {

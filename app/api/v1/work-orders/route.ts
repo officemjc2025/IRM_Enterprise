@@ -58,21 +58,22 @@ export async function GET(request: Request) {
       orders = orders.filter((o) => o.service_team === "HOUSEKEEPING" && o.assigned_to === user.id);
     } else {
       // Residents can only view work orders created by them or matching their assignments
-      // Find person
-      const { data: person } = await supabase
-        .from("persons")
-        .select("id")
-        .eq("email", user.email)
-        .is("deleted_at", null)
-        .maybeSingle();
+      // Find person via profile link
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("person_id")
+        .eq("id", user.id)
+        .single();
 
-      if (!person) {
+      const personId = profile?.person_id;
+
+      if (!personId) {
         orders = [];
       } else {
         const { data: assignments } = await supabase
           .from("resident_assignments")
           .select("id")
-          .eq("person_id", person.id);
+          .eq("person_id", personId);
 
         const assignmentIds = (assignments || []).map((a) => a.id);
 
