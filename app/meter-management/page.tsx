@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useLanguage } from "@/providers/LanguageProvider";
-import { PageHeader, LoadingState, LocalizedDatePicker } from "@/shared/ui";
+import { PageHeader, LoadingState, LocalizedDatePicker, SearchableSelect } from "@/shared/ui";
 import { createClient } from "@/lib/supabase/client";
 import {
   MeterReading,
@@ -131,6 +131,13 @@ export default function MeterManagementPage() {
 
   // Registry & Replacements state
   const [units, setUnits] = useState<UnitOption[]>([]);
+  const unitOptions = React.useMemo(() => {
+    return units.map(u => ({
+      value: u.id,
+      label: `Room ${u.unit_number}`,
+      searchStr: `Room ${u.unit_number}`
+    }));
+  }, [units]);
   const [meters, setMeters] = useState<UtilityMeter[]>([]);
   const [selectedMeterForReplace, setSelectedMeterForReplace] = useState<UtilityMeter | null>(null);
   const [startingReading, setStartingReading] = useState("");
@@ -305,7 +312,10 @@ export default function MeterManagementPage() {
         .select("id, unit_number, water_control_status, electricity_control_status")
         .eq("property_id", selectedProperty)
         .order("unit_number", { ascending: true });
-      if (unitList) setUnits(unitList as UnitOption[]);
+      if (unitList) {
+        const sorted = (unitList as UnitOption[]).sort((a, b) => compareUnitNumbers(a.unit_number, b.unit_number));
+        setUnits(sorted);
+      }
 
       const { data: meterList } = await supabase
         .from("utility_meters")
@@ -2793,17 +2803,15 @@ export default function MeterManagementPage() {
             <form onSubmit={handleCreateMeter} className="space-y-4 text-xs">
               <div className="flex flex-col gap-1.5">
                 <label className="font-semibold text-slate-400">{language === "en" ? "Target Unit (Room)" : "ห้องชุด/ห้องพัก"}</label>
-                <select
+                <SearchableSelect
+                  options={unitOptions}
                   value={newMeterUnitId}
-                  onChange={(e) => setNewMeterUnitId(e.target.value)}
-                  className="p-2 border rounded-xl dark:bg-slate-900 outline-none"
+                  onChange={setNewMeterUnitId}
+                  placeholder={language === "en" ? "Select Room" : "เลือกห้อง"}
+                  searchPlaceholder={language === "en" ? "Search Unit..." : "ค้นหาห้อง..."}
+                  emptyMessage={language === "en" ? "No units found" : "ไม่พบห้องชุด"}
                   required
-                >
-                  <option value="">{language === "en" ? "Select Room" : "เลือกห้อง"}</option>
-                  {units.map((u) => (
-                    <option key={u.id} value={u.id}>Room {u.unit_number}</option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div className="flex flex-col gap-1.5">

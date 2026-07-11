@@ -4,9 +4,10 @@ import React, { use, useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useRouter } from "next/navigation";
 import { Status } from "@/shared/enums/status";
-import { PageHeader } from "@/shared/ui";
+import { PageHeader, SearchableSelect } from "@/shared/ui";
 import { Person } from "@/features/person/types/person.types";
 import { Unit } from "@/features/unit/types/unit.types";
+import { compareUnitNumbers } from "@/shared/utils";
 
 interface EditOwnershipProps {
   params: Promise<{ id: string }>;
@@ -48,7 +49,8 @@ export default function EditOwnershipPage({ params }: EditOwnershipProps) {
           setPersons(jsonPersons.data);
         }
         if (jsonUnits.success) {
-          setUnits(jsonUnits.data);
+          const sorted = [...jsonUnits.data].sort((a, b) => compareUnitNumbers(a.unit_number, b.unit_number));
+          setUnits(sorted);
         }
         if (jsonOwnership.success) {
           const o = jsonOwnership.data;
@@ -72,6 +74,25 @@ export default function EditOwnershipPage({ params }: EditOwnershipProps) {
 
     fetchAllData();
   }, [id]);
+
+  const personOptions = React.useMemo(() => {
+    return persons.map(p => {
+      const name = p.display_name || `${p.first_name} ${p.last_name}`;
+      return {
+        value: p.id,
+        label: `${name} (${p.person_code || "No Code"})`,
+        searchStr: `${name} (${p.person_code || "No Code"})`
+      };
+    });
+  }, [persons]);
+
+  const unitOptions = React.useMemo(() => {
+    return units.map(u => ({
+      value: u.id,
+      label: `Unit ${u.unit_number} (Floor ${u.floor})`,
+      searchStr: `Unit ${u.unit_number} (Floor ${u.floor})`
+    }));
+  }, [units]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,34 +146,26 @@ export default function EditOwnershipPage({ params }: EditOwnershipProps) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Person (Owner) *</label>
-                  <select
-                    required
+                  <SearchableSelect
+                    options={personOptions}
                     value={personId}
-                    onChange={(e) => setPersonId(e.target.value)}
-                    className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm outline-none"
-                  >
-                    {persons.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.display_name || `${p.first_name} ${p.last_name}`} ({p.person_code || "No Code"})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setPersonId}
+                    placeholder="Select owner..."
+                    searchPlaceholder="Search Owner..."
+                    required
+                  />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium mb-1">Unit *</label>
-                  <select
-                    required
+                  <SearchableSelect
+                    options={unitOptions}
                     value={unitId}
-                    onChange={(e) => setUnitId(e.target.value)}
-                    className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm outline-none"
-                  >
-                    {units.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        Unit {u.unit_number} (Floor {u.floor})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setUnitId}
+                    placeholder="Select unit..."
+                    searchPlaceholder="Search Unit..."
+                    required
+                  />
                 </div>
 
                 <div>

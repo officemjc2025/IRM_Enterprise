@@ -3,9 +3,9 @@
 import React, { useEffect, useState, Suspense } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useLanguage } from "@/providers/LanguageProvider";
-import { PageHeader, LoadingState, EmptyState, LocalizedDatePicker } from "@/shared/ui";
+import { PageHeader, LoadingState, EmptyState, LocalizedDatePicker, SearchableSelect } from "@/shared/ui";
 import { createClient } from "@/lib/supabase/client";
-import { formatDateTime } from "@/shared/utils";
+import { formatDateTime, compareUnitNumbers } from "@/shared/utils";
 import { ServiceBooking, ServiceBookingStatus, ServiceBookingType, deriveBookingAttention } from "@/features/service-booking/types/service-booking.types";
 
 interface PropertyOption {
@@ -102,6 +102,39 @@ function ServiceBookingsContent() {
   const [dispatchTeam, setDispatchTeam] = useState<"TECHNICIAN" | "HOUSEKEEPING">("HOUSEKEEPING");
   const [dispatchAssignee, setDispatchAssignee] = useState("");
 
+  const newUnitOptions = React.useMemo(() => {
+    return units
+      .filter((u) => u.property_id === (role === "property_admin" ? propertyFilter : newPropId))
+      .map(u => ({
+        value: u.id,
+        label: `Unit ${u.unit_number}`,
+        searchStr: `Unit ${u.unit_number}`
+      }));
+  }, [units, role, propertyFilter, newPropId]);
+
+  const newCustOptions = React.useMemo(() => {
+    return persons.map(p => {
+      const name = p.display_name || `${p.first_name} ${p.last_name || ""}`;
+      return {
+        value: p.id,
+        label: name,
+        searchStr: name
+      };
+    });
+  }, [persons]);
+
+  const dispatchAssigneeOptions = React.useMemo(() => {
+    const list = dispatchTeam === "HOUSEKEEPING" ? housekeepers : technicians;
+    return list.map(w => {
+      const name = w.display_name || w.full_name || w.email || "Staff";
+      return {
+        value: w.id,
+        label: name,
+        searchStr: name
+      };
+    });
+  }, [dispatchTeam, housekeepers, technicians]);
+
   const isAdmin = ["admin", "super_admin", "property_admin"].includes(role);
 
   useEffect(() => {
@@ -151,7 +184,8 @@ function ServiceBookingsContent() {
         ]);
 
         setProperties(propsRes.data || []);
-        setUnits(unitsRes.data || []);
+        const sortedUnits = (unitsRes.data || []).sort((a, b) => compareUnitNumbers(a.unit_number, b.unit_number));
+        setUnits(sortedUnits);
         setPersons(personsRes.data || []);
         setTechnicians(techsRes.data || []);
         setHousekeepers(housekeepersRes.data || []);
@@ -386,7 +420,7 @@ function ServiceBookingsContent() {
     setEditConfirmed(b.confirmed_amount ? b.confirmed_amount.toString() : "");
   };
 
-  const filteredUnits = units.filter((u) => u.property_id === (role === "property_admin" ? propertyFilter : newPropId));
+
 
   if (error && !isAdmin) {
     return (
@@ -653,34 +687,28 @@ function ServiceBookingsContent() {
               {/* Unit Choice */}
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold text-slate-500 uppercase">{language === "en" ? "Unit / Room" : "ห้องชุด"}</label>
-                <select
+                <SearchableSelect
+                  options={newUnitOptions}
                   value={newUnitId}
-                  onChange={(e) => setNewUnitId(e.target.value)}
+                  onChange={setNewUnitId}
+                  placeholder={language === "en" ? "-- SELECT ROOM --" : "-- เลือกห้องชุด --"}
+                  searchPlaceholder={language === "en" ? "Search Unit..." : "ค้นหาห้องชุด..."}
+                  emptyMessage={language === "en" ? "No units found" : "ไม่พบห้องชุด"}
                   required
-                  className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs dark:bg-slate-900 outline-none w-full"
-                >
-                  <option value="">{language === "en" ? "-- SELECT ROOM --" : "-- เลือกห้องชุด --"}</option>
-                  {filteredUnits.map((u) => (
-                    <option key={u.id} value={u.id}>Unit {u.unit_number}</option>
-                  ))}
-                </select>
+                />
               </div>
 
               {/* Customer Choice */}
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold text-slate-500 uppercase">{language === "en" ? "Customer (Person)" : "ลูกค้าผู้เข้าพัก (บุคคล)"}</label>
-                <select
+                <SearchableSelect
+                  options={newCustOptions}
                   value={newCustId}
-                  onChange={(e) => setNewCustId(e.target.value)}
-                  className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs dark:bg-slate-900 outline-none w-full"
-                >
-                  <option value="">{language === "en" ? "-- EXTERNAL GUEST / UNREGISTERED --" : "-- บุคคลภายนอก / ผู้เข้าพักทั่วไป --"}</option>
-                  {persons.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.display_name || `${p.first_name} ${p.last_name || ""}`}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setNewCustId}
+                  placeholder={language === "en" ? "-- EXTERNAL GUEST / UNREGISTERED --" : "-- บุคคลภายนอก / ผู้เข้าพักทั่วไป --"}
+                  searchPlaceholder={language === "en" ? "Search Guest Name..." : "ค้นหาชื่อผู้เข้าพัก..."}
+                  emptyMessage={language === "en" ? "No guests found" : "ไม่พบข้อมูลบุคคล"}
+                />
               </div>
 
               {/* Service Type */}
@@ -998,22 +1026,14 @@ function ServiceBookingsContent() {
 
                   <div className="flex flex-col gap-1">
                     <label className="text-[10px] font-bold text-slate-500 uppercase">{language === "en" ? "Assign Worker" : "ระบุผู้ปฏิบัติงาน"}</label>
-                    <select
+                    <SearchableSelect
+                      options={dispatchAssigneeOptions}
                       value={dispatchAssignee}
-                      onChange={(e) => setDispatchAssignee(e.target.value)}
-                      className="p-1.5 border border-slate-200 dark:border-slate-700 rounded dark:bg-slate-900 text-xs outline-none"
-                    >
-                      <option value="">{language === "en" ? "-- Unassigned --" : "-- ยังไม่มอบหมายบุคคล --"}</option>
-                      {dispatchTeam === "HOUSEKEEPING" ? (
-                        housekeepers.map((h) => (
-                          <option key={h.id} value={h.id}>{h.full_name || h.display_name}</option>
-                        ))
-                      ) : (
-                        technicians.map((t) => (
-                          <option key={t.id} value={t.id}>{t.full_name || t.display_name}</option>
-                        ))
-                      )}
-                    </select>
+                      onChange={setDispatchAssignee}
+                      placeholder={language === "en" ? "-- Unassigned --" : "-- ยังไม่มอบหมายบุคคล --"}
+                      searchPlaceholder={language === "en" ? "Search Worker..." : "ค้นหาผู้ปฏิบัติงาน..."}
+                      emptyMessage={language === "en" ? "No staff found" : "ไม่พบรายชื่อผู้ปฏิบัติการ"}
+                    />
                   </div>
                 </div>
 

@@ -4,9 +4,10 @@ import React, { useEffect, useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useRouter } from "next/navigation";
 import { Status } from "@/shared/enums/status";
-import { PageHeader } from "@/shared/ui";
+import { PageHeader, SearchableSelect } from "@/shared/ui";
 import { Person } from "@/features/person/types/person.types";
 import { Unit } from "@/features/unit/types/unit.types";
+import { compareUnitNumbers } from "@/shared/utils";
 
 export default function CreateOwnershipPage() {
   const router = useRouter();
@@ -41,8 +42,9 @@ export default function CreateOwnershipPage() {
           if (jsonPersons.data.length > 0) setPersonId(jsonPersons.data[0].id);
         }
         if (jsonUnits.success) {
-          setUnits(jsonUnits.data);
-          if (jsonUnits.data.length > 0) setUnitId(jsonUnits.data[0].id);
+          const sorted = [...jsonUnits.data].sort((a, b) => compareUnitNumbers(a.unit_number, b.unit_number));
+          setUnits(sorted);
+          if (sorted.length > 0) setUnitId(sorted[0].id);
         }
       } catch (err) {
         console.error(err);
@@ -54,6 +56,26 @@ export default function CreateOwnershipPage() {
 
     fetchLookups();
   }, []);
+
+  const personOptions = React.useMemo(() => {
+    return persons.map(p => {
+      const name = p.display_name || `${p.first_name} ${p.last_name}`;
+      return {
+        value: p.id,
+        label: `${name} (${p.person_code || "No Code"})`,
+        searchStr: `${name} (${p.person_code || "No Code"})`
+      };
+    });
+  }, [persons]);
+
+  const unitOptions = React.useMemo(() => {
+    return units.map(u => ({
+      value: u.id,
+      label: `Unit ${u.unit_number} (Floor ${u.floor})`,
+      searchStr: `Unit ${u.unit_number} (Floor ${u.floor})`
+    }));
+  }, [units]);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,34 +129,26 @@ export default function CreateOwnershipPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Person (Owner) *</label>
-                  <select
-                    required
+                  <SearchableSelect
+                    options={personOptions}
                     value={personId}
-                    onChange={(e) => setPersonId(e.target.value)}
-                    className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm outline-none"
-                  >
-                    {persons.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.display_name || `${p.first_name} ${p.last_name}`} ({p.person_code || "No Code"})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setPersonId}
+                    placeholder="Select owner..."
+                    searchPlaceholder="Search Owner..."
+                    required
+                  />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium mb-1">Unit *</label>
-                  <select
-                    required
+                  <SearchableSelect
+                    options={unitOptions}
                     value={unitId}
-                    onChange={(e) => setUnitId(e.target.value)}
-                    className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm outline-none"
-                  >
-                    {units.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        Unit {u.unit_number} (Floor {u.floor})
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setUnitId}
+                    placeholder="Select unit..."
+                    searchPlaceholder="Search Unit..."
+                    required
+                  />
                 </div>
 
                 <div>

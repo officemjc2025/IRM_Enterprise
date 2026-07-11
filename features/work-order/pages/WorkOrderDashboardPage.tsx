@@ -4,7 +4,8 @@ import React, { useEffect, useState, Suspense } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { useLanguage } from "@/providers/LanguageProvider";
 import { WorkOrder, WorkOrderStatus, WorkOrderPriority, WorkOrderPhoto, deriveAttentionStatus } from "@/features/work-order/types/work-order.types";
-import { PageHeader, SearchInput, EmptyState, LoadingState, LocalizedDateTimePicker } from "@/shared/ui";
+import { PageHeader, SearchInput, EmptyState, LoadingState, LocalizedDateTimePicker, SearchableSelect } from "@/shared/ui";
+import { compareUnitNumbers } from "@/shared/utils";
 import { createClient } from "@/lib/supabase/client";
 import { User } from "@supabase/supabase-js";
 
@@ -102,6 +103,34 @@ function WorkOrderDashboardInner() {
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState("");
 
+  const editAssigneeOptions = React.useMemo(() => {
+    const list = serviceTeamVal === "HOUSEKEEPING" ? housekeepers : technicians;
+    return list.map(w => ({
+      value: w.id,
+      label: w.display_name || w.full_name || w.email,
+      searchStr: `${w.display_name || ""} ${w.full_name || ""} ${w.email}`
+    }));
+  }, [serviceTeamVal, housekeepers, technicians]);
+
+  const newAssigneeOptions = React.useMemo(() => {
+    const list = newServiceTeam === "HOUSEKEEPING" ? housekeepers : technicians;
+    return list.map(w => ({
+      value: w.id,
+      label: w.display_name || w.full_name || w.email,
+      searchStr: `${w.display_name || ""} ${w.full_name || ""} ${w.email}`
+    }));
+  }, [newServiceTeam, housekeepers, technicians]);
+
+  const newUnitOptions = React.useMemo(() => {
+    return units
+      .filter(u => u.property_id === newPropertyId)
+      .map(u => ({
+        value: u.id,
+        label: `Unit ${u.unit_number}`,
+        searchStr: `Unit ${u.unit_number}`
+      }));
+  }, [units, newPropertyId]);
+
   const loadInitialData = async () => {
     try {
       setLoading(true);
@@ -139,7 +168,8 @@ function WorkOrderDashboardInner() {
       setProperties((props as PropertyOption[]) || []);
 
       const { data: uns } = await supabase.from("units").select("id, unit_number, property_id");
-      setUnits((uns as UnitOption[]) || []);
+      const sortedUnits = ((uns as UnitOption[]) || []).sort((a, b) => compareUnitNumbers(a.unit_number, b.unit_number));
+      setUnits(sortedUnits);
 
       await refreshData();
     } catch (err) {
@@ -412,7 +442,7 @@ function WorkOrderDashboardInner() {
   const isAdmin = ["admin", "super_admin", "property_admin"].includes(role);
   const isTechnician = role === "technician";
 
-  const filteredUnits = units.filter((u) => u.property_id === newPropertyId);
+
 
   // Search filter
   const searchedOrders = workOrders.filter((o) => {
@@ -1028,24 +1058,14 @@ function WorkOrderDashboardInner() {
                       ? (language === "en" ? "Technician" : "ช่างเทคนิค")
                       : (language === "en" ? "Housekeeper" : "แม่บ้าน")}
                   </label>
-                  <select
+                  <SearchableSelect
+                    options={editAssigneeOptions}
                     value={assigneeId}
-                    onChange={(e) => setAssigneeId(e.target.value)}
-                    className="p-1.5 border border-slate-200 dark:border-slate-700 rounded text-xs dark:bg-slate-900 outline-none"
-                  >
-                    <option value="">-- UNASSIGNED --</option>
-                    {serviceTeamVal === "TECHNICIAN"
-                      ? technicians.map((t) => (
-                          <option key={t.id} value={t.id}>
-                            {t.full_name || t.display_name}
-                          </option>
-                        ))
-                      : housekeepers.map((h) => (
-                          <option key={h.id} value={h.id}>
-                            {h.full_name || h.display_name}
-                          </option>
-                        ))}
-                  </select>
+                    onChange={setAssigneeId}
+                    placeholder="-- UNASSIGNED --"
+                    searchPlaceholder={language === "en" ? "Search Worker..." : "ค้นหาชื่อผู้ปฏิบัติการ..."}
+                    emptyMessage={language === "en" ? "No staff found" : "ไม่พบรายชื่อผู้ปฏิบัติงาน"}
+                  />
                 </div>
 
                 {/* Priority Selection */}
@@ -1263,20 +1283,16 @@ function WorkOrderDashboardInner() {
               {/* Unit Selector */}
               <div className="flex flex-col gap-1">
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{language === "en" ? "Room Unit" : "ห้องชุด"}</label>
-                <select
-                  required
-                  disabled={!newPropertyId}
+                <SearchableSelect
+                  options={newUnitOptions}
                   value={newUnitId}
-                  onChange={(e) => setNewUnitId(e.target.value)}
-                  className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none disabled:opacity-50"
-                >
-                  <option value="">-- SELECT UNIT --</option>
-                  {filteredUnits.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      Unit {u.unit_number}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setNewUnitId}
+                  placeholder={language === "en" ? "-- SELECT UNIT --" : "-- เลือกห้องชุด --"}
+                  searchPlaceholder={language === "en" ? "Search Unit..." : "ค้นหาห้องชุด..."}
+                  emptyMessage={language === "en" ? "No units found" : "ไม่พบห้องชุด"}
+                  disabled={!newPropertyId}
+                  required
+                />
               </div>
 
               {/* Title */}
@@ -1359,24 +1375,14 @@ function WorkOrderDashboardInner() {
                     ? (language === "en" ? "Assign Technician" : "มอบหมายช่างเทคนิค")
                     : (language === "en" ? "Assign Housekeeper" : "มอบหมายแม่บ้าน")}
                 </label>
-                <select
+                <SearchableSelect
+                  options={newAssigneeOptions}
                   value={newAssigneeId}
-                  onChange={(e) => setNewAssigneeId(e.target.value)}
-                  className="p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none"
-                >
-                  <option value="">-- UNASSIGNED --</option>
-                  {newServiceTeam === "TECHNICIAN"
-                    ? technicians.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.full_name || t.display_name}
-                        </option>
-                      ))
-                    : housekeepers.map((h) => (
-                        <option key={h.id} value={h.id}>
-                          {h.full_name || h.display_name}
-                        </option>
-                      ))}
-                </select>
+                  onChange={setNewAssigneeId}
+                  placeholder="-- UNASSIGNED --"
+                  searchPlaceholder={language === "en" ? "Search Worker..." : "ค้นหาชื่อผู้ปฏิบัติการ..."}
+                  emptyMessage={language === "en" ? "No staff found" : "ไม่พบรายชื่อผู้ปฏิบัติงาน"}
+                />
               </div>
 
               {/* Description */}

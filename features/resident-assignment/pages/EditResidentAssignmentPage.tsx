@@ -7,6 +7,8 @@ import { Status } from "@/shared/enums/status";
 import { RESIDENT_OCCUPANCY_TYPES } from "../types/resident-assignment.types";
 import { Unit } from "@/features/unit/types/unit.types";
 import { Person } from "@/features/person/types/person.types";
+import { SearchableSelect } from "@/shared/ui";
+import { compareUnitNumbers } from "@/shared/utils";
 import { useLanguage } from "@/providers/LanguageProvider";
 
 interface EditResidentAssignmentProps {
@@ -45,7 +47,10 @@ export default function EditResidentAssignmentPage({ params }: EditResidentAssig
         const peopleJson = await peopleRes.json();
         const detailsJson = await detailsRes.json();
 
-        if (unitsJson.success) setUnits(unitsJson.data);
+        if (unitsJson.success) {
+          const sorted = [...unitsJson.data].sort((a, b) => compareUnitNumbers(a.unit_number, b.unit_number));
+          setUnits(sorted);
+        }
         if (peopleJson.success) setPeople(peopleJson.data);
 
         if (detailsJson.success) {
@@ -70,6 +75,25 @@ export default function EditResidentAssignmentPage({ params }: EditResidentAssig
     };
     loadOptionsAndDetails();
   }, [id]);
+
+  const personOptions = React.useMemo(() => {
+    return people.map(p => {
+      const name = p.display_name || `${p.first_name} ${p.last_name || ""}`;
+      return {
+        value: p.id,
+        label: `${name} (${p.person_code || "No Code"})`,
+        searchStr: `${name} (${p.person_code || "No Code"})`
+      };
+    });
+  }, [people]);
+
+  const unitOptions = React.useMemo(() => {
+    return units.map(u => ({
+      value: u.id,
+      label: `Unit ${u.unit_number} (${u.building_code || "Main"})`,
+      searchStr: `Unit ${u.unit_number} (${u.building_code || "Main"})`
+    }));
+  }, [units]);
 
   const handleMoveOutDateChange = (val: string) => {
     setMoveOutDate(val);
@@ -154,18 +178,14 @@ export default function EditResidentAssignmentPage({ params }: EditResidentAssig
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   {t.residentAssignment.residentName}
                 </label>
-                <select
+                <SearchableSelect
+                  options={personOptions}
                   value={personId}
-                  onChange={(e) => setPersonId(e.target.value)}
-                  className="p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none cursor-pointer"
+                  onChange={setPersonId}
+                  placeholder="Select person..."
+                  searchPlaceholder="Search Name..."
                   required
-                >
-                  {people.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.display_name || `${p.first_name} ${p.last_name || ""}`}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               {/* Unit */}
@@ -173,18 +193,14 @@ export default function EditResidentAssignmentPage({ params }: EditResidentAssig
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                   {t.residentAssignment.unit}
                 </label>
-                <select
+                <SearchableSelect
+                  options={unitOptions}
                   value={unitId}
-                  onChange={(e) => setUnitId(e.target.value)}
-                  className="p-2.5 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm font-semibold outline-none cursor-pointer"
+                  onChange={setUnitId}
+                  placeholder="Select unit..."
+                  searchPlaceholder="Search Unit..."
                   required
-                >
-                  {units.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.unit_number} (Floor {u.floor})
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
 
               {/* Occupancy Type */}

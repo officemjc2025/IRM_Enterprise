@@ -7,6 +7,8 @@ import { Status } from "@/shared/enums/status";
 import { OccupancyType, OCCUPANCY_TYPES } from "../types/occupancy.types";
 import { Unit } from "@/features/unit/types/unit.types";
 import { createClient } from "@/lib/supabase/client";
+import { SearchableSelect } from "@/shared/ui";
+import { compareUnitNumbers } from "@/shared/utils";
 
 interface PersonOption {
   id: string;
@@ -40,7 +42,8 @@ export default function EditOccupancyPage({ params }: EditOccupancyProps) {
         const unitsRes = await fetch("/api/v1/units");
         const unitsJson = await unitsRes.json();
         if (unitsJson.success) {
-          setUnits(unitsJson.data);
+          const sorted = [...unitsJson.data].sort((a, b) => compareUnitNumbers(a.unit_number, b.unit_number));
+          setUnits(sorted);
         }
 
         const supabase = createClient();
@@ -76,6 +79,25 @@ export default function EditOccupancyPage({ params }: EditOccupancyProps) {
 
     fetchOptionsAndOccupancy();
   }, [id]);
+
+  const unitOptions = React.useMemo(() => {
+    return units.map(u => ({
+      value: u.id,
+      label: `Unit ${u.unit_number} (${u.building_code || "Main"})`,
+      searchStr: `Unit ${u.unit_number} (${u.building_code || "Main"})`
+    }));
+  }, [units]);
+
+  const personOptions = React.useMemo(() => {
+    return people.map(p => {
+      const name = `${p.first_name} ${p.last_name || ""}`;
+      return {
+        value: p.id,
+        label: name,
+        searchStr: name
+      };
+    });
+  }, [people]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,34 +152,26 @@ export default function EditOccupancyPage({ params }: EditOccupancyProps) {
 
               <div>
                 <label className="block text-sm font-medium mb-1">Unit *</label>
-                <select
-                  required
+                <SearchableSelect
+                  options={unitOptions}
                   value={unitId}
-                  onChange={(e) => setUnitId(e.target.value)}
-                  className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm"
-                >
-                  {units.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      Unit {u.unit_number} ({u.building_code || "Main"})
-                    </option>
-                  ))}
-                </select>
+                  onChange={setUnitId}
+                  placeholder="Select unit..."
+                  searchPlaceholder="Search Unit..."
+                  required
+                />
               </div>
 
               <div>
                 <label className="block text-sm font-medium mb-1">Occupant (Person) *</label>
-                <select
-                  required
+                <SearchableSelect
+                  options={personOptions}
                   value={personId}
-                  onChange={(e) => setPersonId(e.target.value)}
-                  className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg dark:bg-slate-900 text-sm"
-                >
-                  {people.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.first_name} {p.last_name || ""}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setPersonId}
+                  placeholder="Select person..."
+                  searchPlaceholder="Search Name..."
+                  required
+                />
               </div>
 
               <div>
