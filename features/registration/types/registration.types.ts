@@ -3,10 +3,6 @@
 // IRM-043: Canonical Registration Foundation
 // =====================================================
 
-// ---------------------
-// Enums
-// ---------------------
-
 export enum RegistrationStatus {
   PENDING = "PENDING",
   UNDER_REVIEW = "UNDER_REVIEW",
@@ -40,54 +36,70 @@ export enum InvitationSource {
   ADMIN = "ADMIN",
 }
 
-// ---------------------
-// Core Entity
-// ---------------------
-
 export interface RegistrationRequest {
   id: string;
+  property_id: string;
+  unit_id: string;
+  person_id: string | null;
   registration_type: RegistrationType;
-  invitation_source: InvitationSource;
-  status: RegistrationStatus;
-
-  // Applicant identity
+  relationship: RegistrationRelationship;
   first_name: string;
   last_name: string;
-  email: string;
+  display_name: string;
+  email: string | null;
   phone: string | null;
+  nationality: string | null;
   id_card: string | null;
+  passport: string | null;
+  invitation_source: InvitationSource;
+  status: RegistrationStatus;
+  remarks: string | null;
 
-  // Unit claim
-  unit_id: string | null;
-  relationship: RegistrationRelationship | null;
+  // Transaction Table Standard Audit
+  created_at: string;
+  created_by: string | null;
+  updated_at: string;
+  updated_by: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
 
-  // Admin
+  // Review
   reviewed_by: string | null;
   reviewed_at: string | null;
   rejection_reason: string | null;
-  remarks: string | null;
 
-  // Audit
-  created_at: string;
-  updated_at: string;
-  deleted_at: string | null;
+  // Snapshot Fields
+  requested_unit_number: string;
+  requested_property_name: string | null;
+
+  // Client Audit
+  source_ip: string | null;
+  user_agent: string | null;
 }
 
-// ---------------------
-// DTOs (future API use)
-// ---------------------
-
 export interface CreateRegistrationRequestDto {
+  property_id: string;
+  unit_id: string;
+  person_id?: string | null;
   registration_type: RegistrationType;
-  invitation_source: InvitationSource;
+  relationship: RegistrationRelationship;
   first_name: string;
   last_name: string;
-  email: string;
+  display_name?: string;
+  email?: string | null;
   phone?: string | null;
+  nationality?: string | null;
   id_card?: string | null;
-  unit_id?: string | null;
-  relationship?: RegistrationRelationship | null;
+  passport?: string | null;
+  invitation_source: InvitationSource;
   remarks?: string | null;
+
+  // Populated by system
+  requested_unit_number?: string;
+  requested_property_name?: string | null;
+  source_ip?: string | null;
+  user_agent?: string | null;
+  created_by?: string | null;
 }
 
 export interface UpdateRegistrationRequestDto {
@@ -96,4 +108,5 @@ export interface UpdateRegistrationRequestDto {
   reviewed_at?: string | null;
   rejection_reason?: string | null;
   remarks?: string | null;
+  updated_by?: string | null;
 }
