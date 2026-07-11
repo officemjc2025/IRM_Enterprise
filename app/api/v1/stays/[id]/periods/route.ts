@@ -114,7 +114,9 @@ export async function POST(request: Request, { params }: Params) {
       const endStr = periodEnd.toISOString().split("T")[0];
 
       const dueStart = new Date(currentStart.getFullYear(), currentStart.getMonth(), 5);
-      const dueStr = (dueStart < periodEnd ? dueStart : periodEnd).toISOString().split("T")[0];
+      const calculatedDue = dueStart < periodEnd ? dueStart : periodEnd;
+      const finalDue = calculatedDue > currentStart ? calculatedDue : currentStart;
+      const dueStr = finalDue.toISOString().split("T")[0];
 
       let rent = reservation.monthly_rate || 0;
       if (reservation.billing_basis === "DAILY") {
