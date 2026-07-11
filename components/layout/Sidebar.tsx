@@ -66,6 +66,7 @@ export default function Sidebar({
         { id: "import", label: language === "en" ? "Import Master Data" : "นำเข้าข้อมูล", href: "/import", icon: IconDashboard },
         { id: "search", label: language === "en" ? "Search" : "ค้นหา", href: "/search", icon: IconVisitors },
         { id: "announcements", label: language === "en" ? "Announcements" : "ประกาศ", href: "/announcements", icon: IconDashboard },
+        { id: "registration-requests", label: language === "en" ? "Registration Requests" : "คำขอลงทะเบียน", href: "/registration-requests", icon: IconResidents },
         { id: "security", label: language === "en" ? "Security Dashboard" : "ระบบรักษาความปลอดภัย", href: "/security", icon: IconVisitors },
         { id: "work-orders", label: language === "en" ? "Work Orders" : "ใบสั่งงาน", href: "/work-orders", icon: IconDashboard },
       ].filter((item) => {
