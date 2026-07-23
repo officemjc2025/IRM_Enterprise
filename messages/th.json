@@ -299,5 +299,26 @@
     "changeUnit": "เปลี่ยนห้องชุด",
     "moveOut": "ย้ายออก",
     "reactivate": "เปิดใช้งานการมอบหมายอีกครั้ง"
+  },
+  "staff": {
+    "title": "การจัดการเจ้าหน้าที่",
+    "createStaff": "เพิ่มเจ้าหน้าที่",
+    "editStaff": "แก้ไขเจ้าหน้าที่",
+    "noStaffFound": "ไม่พบข้อมูลเจ้าหน้าที่",
+    "searchPlaceholder": "ค้นหาด้วยรหัสพนักงาน, ชื่อ, อีเมล, เบอร์โทรศัพท์...",
+    "employeeCode": "รหัสพนักงาน",
+    "fullName": "ชื่อ-นามสกุล",
+    "displayName": "ชื่อที่แสดง",
+    "role": "บทบาท",
+    "department": "แผนก",
+    "property": "โครงการ",
+    "accountStatus": "สถานะบัญชี",
+    "invitationStatus": "สถานะการเชิญ",
+    "disableStaff": "ปิดใช้งานบัญชี",
+    "enableStaff": "เปิดใช้งานบัญชี",
+    "resetPassword": "รีเซ็ตรหัสผ่าน",
+    "sendInvitation": "ส่งคำเชิญ",
+    "activate": "เปิดใช้งาน",
+    "deactivate": "ปิดใช้งาน"
   }
 }

@@ -30,6 +30,7 @@ interface PortalAssignment extends Omit<ResidentAssignment, "unit"> {
 interface PortalData {
   person: Person | null;
   assignment: PortalAssignment | null;
+  assignments?: PortalAssignment[] | null;
   role: string;
 }
 
@@ -42,6 +43,8 @@ export default function ResidentPortalPage() {
   const [error, setError] = useState("");
   const [impersonateEmail, setImpersonateEmail] = useState("");
   const [activeImpersonation, setActiveImpersonation] = useState("");
+  const [selectedAssignmentIndex, setSelectedAssignmentIndex] = useState<number>(0);
+  const activeAssignment = data?.assignments?.[selectedAssignmentIndex] || data?.assignment || null;
 
   // Announcements State
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -174,20 +177,20 @@ export default function ResidentPortalPage() {
     setVisitorError("");
     setVisitorSaving(true);
 
-    if (!data?.assignment) {
+    if (!activeAssignment) {
       setVisitorError("No active residence assignment resolved.");
       setVisitorSaving(false);
       return;
     }
 
     try {
-      let isoExpectedArrival = null;
+      let isoExpectedArrival: string | null = null;
       if (expectedArrival) {
         isoExpectedArrival = new Date(`${visitDate}T${expectedArrival}`).toISOString();
       }
 
       const payload = {
-        resident_assignment_id: data.assignment.id,
+        resident_assignment_id: activeAssignment.id,
         visitor_name: visitorName.trim(),
         phone: visitorPhone.trim() || null,
         vehicle_plate: vehiclePlate.trim() || null,
@@ -249,7 +252,7 @@ export default function ResidentPortalPage() {
     setWorkOrderError("");
     setWorkOrderSaving(true);
 
-    if (!data?.assignment) {
+    if (!activeAssignment) {
       setWorkOrderError("No active residence assignment resolved.");
       setWorkOrderSaving(false);
       return;
@@ -261,9 +264,9 @@ export default function ResidentPortalPage() {
         title: workOrderTitle.trim(),
         description: workOrderDescription.trim() || null,
         priority: workOrderPriority,
-        resident_assignment_id: data.assignment.id,
-        unit_id: data.assignment.unit_id,
-        property_id: data.assignment.unit?.property_id,
+        resident_assignment_id: activeAssignment.id,
+        unit_id: activeAssignment.unit_id,
+        property_id: activeAssignment.unit?.property_id,
       };
 
       const res = await fetch("/api/v1/work-orders", {
@@ -296,7 +299,7 @@ export default function ResidentPortalPage() {
   const isAdmin = data?.role === "admin" || data?.role === "super_admin" || data?.role === "property_admin";
 
   // Filter announcements matching the resident's property scope
-  const targetPropertyId = data?.assignment?.unit?.property_id;
+  const targetPropertyId = activeAssignment?.unit?.property_id;
   const filteredAnnouncements = announcements
     .filter((ann) => {
       if (!ann.property_id) return true; // Show global announcements to everyone
@@ -304,9 +307,11 @@ export default function ResidentPortalPage() {
     })
     .slice(0, 5); // Limit to top 5
 
-  // Filter visitors by tab groups
+  // Filter visitors by active assignment scope and tab groups
   const todayStr = new Date().toISOString().split("T")[0];
-  const tabVisitors = visitors.filter((v) => {
+  const activeAssignmentId = activeAssignment?.id;
+  const filteredVisitors = visitors.filter((v) => !activeAssignmentId || v.resident_assignment_id === activeAssignmentId);
+  const tabVisitors = filteredVisitors.filter((v) => {
     if (visitorTab === "TODAY") {
       return v.visit_date === todayStr && v.status !== "CLOSED" && v.status !== "CANCELLED";
     } else if (visitorTab === "UPCOMING") {
@@ -316,8 +321,9 @@ export default function ResidentPortalPage() {
     }
   });
 
-  // Filter work orders by tab groups
-  const tabWorkOrders = workOrders.filter((wo) => {
+  // Filter work orders by active assignment scope and tab groups
+  const filteredWorkOrders = workOrders.filter((wo) => !activeAssignmentId || wo.resident_assignment_id === activeAssignmentId);
+  const tabWorkOrders = filteredWorkOrders.filter((wo) => {
     if (workOrderTab === "OPEN") {
       return ["NEW", "ASSIGNED", "IN_PROGRESS", "ON_HOLD"].includes(wo.status);
     } else if (workOrderTab === "COMPLETED") {
@@ -404,7 +410,7 @@ export default function ResidentPortalPage() {
                 : "ไม่พบที่อยู่อีเมลของคุณในการลงทะเบียนประวัติผู้อยู่อาศัยในระบบ"}
             </p>
           </div>
-        ) : !data.assignment ? (
+        ) : !activeAssignment ? (
           <div className="space-y-6">
             {/* Header info with Profile navigation */}
             <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-6 shadow-sm flex flex-col sm:flex-row items-center gap-6 justify-between">
@@ -475,7 +481,7 @@ export default function ResidentPortalPage() {
                       ID: {data.person.person_code || "No Code"}
                     </span>
                     <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      {getPropertyName(data.assignment)} • Unit {data.assignment.unit?.unit_number}
+                      {getPropertyName(activeAssignment)} • Unit {activeAssignment.unit?.unit_number}
                     </span>
                   </div>
                 </div>
@@ -484,11 +490,11 @@ export default function ResidentPortalPage() {
               <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-end">
                 <div className="flex flex-col gap-1 items-start md:items-end">
                   <span className="px-2 py-0.5 rounded font-medium text-xs bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300">
-                    {data.assignment.occupancy_type}
+                    {activeAssignment.occupancy_type}
                   </span>
                   <span className="text-[10px] uppercase font-bold text-slate-400 mt-1">Status</span>
                   <span className="text-xs font-bold text-green-600 dark:text-green-400 mt-0.5">
-                    ● {data.assignment.status}
+                    ● {activeAssignment.status}
                   </span>
                 </div>
                 <button
@@ -497,6 +503,75 @@ export default function ResidentPortalPage() {
                 >
                   {language === "en" ? "View Profile" : "ดูโปรไฟล์"}
                 </button>
+              </div>
+            </div>
+
+            {/* My Properties & Multi-Unit switching */}
+            <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-6 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 dark:border-slate-700 pb-3 gap-3">
+                <div>
+                  <h4 className="font-bold text-slate-800 dark:text-slate-200 text-base">
+                    🏢 {language === "en" ? "My Properties" : "โครงการและห้องชุดของฉัน"}
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    {language === "en" 
+                      ? "Manage and switch between your registered condominium units." 
+                      : "จัดการและสลับการทำรายการระหว่างห้องชุดที่คุณลงทะเบียนไว้"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => router.push("/register?mode=add-unit")}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm"
+                >
+                  <span>+</span>
+                  {language === "en" ? "Register Another Unit" : "ลงทะเบียนเพิ่มอีกห้องชุด"}
+                </button>
+              </div>
+
+              {/* Assignments List */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {(data.assignments && data.assignments.length > 0 ? data.assignments : [activeAssignment]).filter(Boolean).map((assignment: PortalAssignment, idx: number) => {
+                  const isActive = idx === selectedAssignmentIndex;
+                  return (
+                    <div
+                      key={assignment.id}
+                      onClick={() => setSelectedAssignmentIndex(idx)}
+                      className={`p-4 rounded-xl border transition cursor-pointer flex flex-col justify-between gap-3 ${
+                        isActive
+                          ? "bg-indigo-600/5 border-indigo-500 shadow-sm ring-1 ring-indigo-500/20"
+                          : "bg-slate-50/50 hover:bg-slate-55 dark:bg-slate-900/30 dark:hover:bg-slate-900/50 border-slate-200 dark:border-slate-700"
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-start">
+                          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                            isActive
+                              ? "bg-indigo-600 text-white"
+                              : "bg-slate-200 dark:bg-slate-800 text-slate-650 dark:text-slate-400"
+                          }`}>
+                            {language === "en" ? (isActive ? "Selected" : "Select") : (isActive ? "กำลังเลือก" : "คลิกเพื่อเลือก")}
+                          </span>
+                          <span className="text-[11px] font-semibold text-green-600 dark:text-green-400">
+                            ● {assignment.status || "ACTIVE"}
+                          </span>
+                        </div>
+                        <h5 className="font-bold text-slate-800 dark:text-slate-200 text-sm mt-1">
+                          {getPropertyName(assignment)}
+                        </h5>
+                        <p className="text-xs text-slate-500 dark:text-slate-450 font-mono">
+                          {language === "en" ? "Unit" : "ห้องชุด"} {assignment.unit?.unit_number} (Floor {assignment.unit?.floor})
+                        </p>
+                      </div>
+
+                      <div className="flex justify-between items-center pt-2 border-t border-slate-100 dark:border-slate-750/30 text-xs">
+                        <span className="text-slate-400">{language === "en" ? "Relationship" : "สถานะ"}</span>
+                        <span className="font-medium text-slate-750 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                          {assignment.occupancy_type}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -779,7 +854,7 @@ export default function ResidentPortalPage() {
                       {language === "en" ? "Property Name" : "ชื่อโครงการ"}
                     </span>
                     <span className="font-semibold text-slate-700 dark:text-slate-300">
-                      {getPropertyName(data.assignment)}
+                      {getPropertyName(activeAssignment)}
                     </span>
                   </div>
                   <div>
@@ -787,7 +862,7 @@ export default function ResidentPortalPage() {
                       {language === "en" ? "Building" : "อาคาร"}
                     </span>
                     <span className="font-semibold text-slate-700 dark:text-slate-300">
-                      Building {data.assignment.unit?.building_code || "-"}
+                      Building {activeAssignment.unit?.building_code || "-"}
                     </span>
                   </div>
                   <div>
@@ -795,7 +870,7 @@ export default function ResidentPortalPage() {
                       {language === "en" ? "Unit" : "ห้องชุด"}
                     </span>
                     <span className="font-semibold font-mono text-slate-700 dark:text-slate-300">
-                      {data.assignment.unit?.unit_number} (Floor {data.assignment.unit?.floor})
+                      {activeAssignment.unit?.unit_number} (Floor {activeAssignment.unit?.floor})
                     </span>
                   </div>
                 </div>
@@ -815,7 +890,7 @@ export default function ResidentPortalPage() {
                       {language === "en" ? "Move In Date" : "วันที่ย้ายเข้า"}
                     </span>
                     <span className="font-semibold text-slate-700 dark:text-slate-300">
-                      {data.assignment.move_in_date}
+                      {activeAssignment.move_in_date}
                     </span>
                   </div>
                   <div>
@@ -823,7 +898,7 @@ export default function ResidentPortalPage() {
                       {language === "en" ? "Occupancy Type" : "ประเภทการอยู่อาศัย"}
                     </span>
                     <span className="px-2 py-0.5 rounded font-medium text-xs bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300 inline-block mt-1">
-                      {data.assignment.occupancy_type}
+                      {activeAssignment.occupancy_type}
                     </span>
                   </div>
                   <div>
@@ -832,12 +907,12 @@ export default function ResidentPortalPage() {
                     </span>
                     <span
                       className={`px-2 py-0.5 rounded font-bold text-xs inline-block mt-1 ${
-                        data.assignment.primary_resident
+                        activeAssignment.primary_resident
                           ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
                           : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-500"
                       }`}
                     >
-                      {data.assignment.primary_resident ? t.residentAssignment.yes : t.residentAssignment.no}
+                      {activeAssignment.primary_resident ? t.residentAssignment.yes : t.residentAssignment.no}
                     </span>
                   </div>
                 </div>
@@ -868,6 +943,48 @@ export default function ResidentPortalPage() {
                       {data.person.email || "-"}
                     </span>
                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Services Grid (Placeholders) */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Card 4: Bookings (Placeholder) */}
+              <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-6 shadow-sm space-y-3 opacity-75">
+                <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-2">
+                  <span className="text-lg">📅</span>
+                  <h4 className="font-bold text-slate-850 dark:text-slate-200 text-sm">
+                    {language === "en" ? "My Bookings" : "การจองของฉัน"}
+                  </h4>
+                </div>
+                <div className="text-xs text-slate-500 py-3 text-center">
+                  {language === "en" ? "Booking facility services are under construction." : "บริการจองสิ่งอำนวยความสะดวกกำลังอยู่ระหว่างการก่อสร้าง"}
+                </div>
+              </div>
+
+              {/* Card 5: Documents (Placeholder) */}
+              <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-6 shadow-sm space-y-3 opacity-75">
+                <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-2">
+                  <span className="text-lg">📁</span>
+                  <h4 className="font-bold text-slate-850 dark:text-slate-200 text-sm">
+                    {language === "en" ? "My Documents" : "เอกสารของฉัน"}
+                  </h4>
+                </div>
+                <div className="text-xs text-slate-500 py-3 text-center">
+                  {language === "en" ? "Document repository features are under construction." : "ระบบคลังเอกสารกำลังอยู่ระหว่างการก่อสร้าง"}
+                </div>
+              </div>
+
+              {/* Card 6: Complaints (Placeholder) */}
+              <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-6 shadow-sm space-y-3 opacity-75">
+                <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-700 pb-2">
+                  <span className="text-lg">⚠️</span>
+                  <h4 className="font-bold text-slate-850 dark:text-slate-200 text-sm">
+                    {language === "en" ? "My Complaints" : "ข้อร้องเรียนของฉัน"}
+                  </h4>
+                </div>
+                <div className="text-xs text-slate-500 py-3 text-center">
+                  {language === "en" ? "Complaint logging features are under construction." : "ระบบร้องเรียนและแจ้งปัญหาอยู่ในระหว่างการปรับปรุง"}
                 </div>
               </div>
             </div>

@@ -7,9 +7,17 @@ export const Permissions = {
     ROLES.PROPERTY_ADMIN,
   ],
 
+  ManageStaff: [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.PROPERTY_ADMIN,
+    ROLES.OFFICE,
+  ],
+
   ManageResident: [
     ROLES.SUPER_ADMIN,
     ROLES.PROPERTY_ADMIN,
+    ROLES.OFFICE,
   ],
 
   SecurityGate: [
@@ -20,6 +28,7 @@ export const Permissions = {
   WorkOrder: [
     ROLES.TECHNICIAN,
     ROLES.PROPERTY_ADMIN,
+    ROLES.OFFICE,
   ],
 
   ResidentPortal: [

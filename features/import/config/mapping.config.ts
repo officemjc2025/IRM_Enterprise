@@ -27,5 +27,18 @@ export const MAPPING_CONFIG: Record<CanonicalField, string[]> = {
   status: ["active", "state"],
   water_meter: ["water_meter", "watermeter", "water_meter_no", "water_meter_number", "water_no", "water_code", "water_meter_serial"],
   electricity_meter: ["electricity_meter", "electricitymeter", "electricity_meter_no", "electricity_meter_number", "electricity_no", "electric_meter", "electric_no", "electricity_meter_serial"],
-  resident_name: ["resident", "resident_name", "residentname", "occupant", "occupant_name"]
+  resident_name: ["resident", "resident_name", "residentname", "occupant", "occupant_name"],
+  employee_code: ["employee_code", "employee_id", "emp_code", "emp_id"],
+  first_name: ["first_name", "firstname", "first"],
+  last_name: ["last_name", "lastname", "last"],
+  role: ["role", "role_name", "position"],
+  department: ["department", "dept"],
+  team: ["team", "group"],
+  language: ["language", "lang", "pref_lang"],
+  active: ["active", "is_active", "status"],
+  photo_url: ["photo_url", "photo", "avatar", "image"],
+  prefix: ["prefix", "title", "prefix_name"],
+  nickname: ["nickname", "nick_name", "nick"],
+  account_status: ["account_status", "accountstatus"],
+  send_invitation: ["send_invitation", "sendinvitation", "invite", "send_invite"]
 };

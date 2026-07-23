@@ -1,10 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { useContext } from "react";
 import { UserMenu } from "./UserMenu";
 import { NotificationButton } from "./NotificationButton";
 import LanguageSwitcher from "@/components/common/LanguageSwitcher";
 import { useLanguage } from "@/providers/LanguageProvider";
+import { AuthContext } from "@/providers/AuthProvider";
 
 interface TopNavigationProps {
   onMenuClick: () => void;
@@ -12,6 +13,9 @@ interface TopNavigationProps {
 
 export function TopNavigation({ onMenuClick }: TopNavigationProps) {
   const { t } = useLanguage();
+  const auth = useContext(AuthContext);
+  const userRole = auth?.profile?.role || "";
+  const hideLanguageSwitcher = ["office", "security", "technician", "housekeeping"].includes(userRole);
   return (
     <header className="sticky top-0 z-30 w-full border-b border-[#D4AF37]/20 bg-[#0F172A] text-white shadow-md">
       <div className="flex h-16 items-center justify-between px-6">
@@ -40,7 +44,7 @@ export function TopNavigation({ onMenuClick }: TopNavigationProps) {
             <span className="hidden sm:inline">{t.topNav.searchPlaceholder}</span>
           </a>
 
-          <LanguageSwitcher />
+          {!hideLanguageSwitcher && <LanguageSwitcher />}
 
           <NotificationButton />
           

@@ -23,7 +23,7 @@ export async function GET() {
       .eq("id", user.id)
       .single();
 
-    const isAdmin = profile && ["admin", "super_admin", "property_admin"].includes(profile.role);
+    const isAdmin = profile && ["admin", "super_admin", "property_admin", "office"].includes(profile.role);
     const isTechnician = profile && profile.role === "technician";
     const isHousekeeper = profile && profile.role === "housekeeping";
 
@@ -32,11 +32,11 @@ export async function GET() {
     if (isAdmin) {
       // Admins see all work orders
     } else if (isTechnician) {
-      // Technicians only see technician jobs assigned to them
-      orders = allOrders.filter((o) => o.service_team === "TECHNICIAN" && o.assigned_to === user.id);
+      // Technicians see technician jobs assigned to them OR unassigned technician jobs
+      orders = allOrders.filter((o) => o.service_team === "TECHNICIAN" || o.assigned_to === user.id);
     } else if (isHousekeeper) {
-      // Housekeepers only see housekeeping jobs assigned to them
-      orders = allOrders.filter((o) => o.service_team === "HOUSEKEEPING" && o.assigned_to === user.id);
+      // Housekeepers see housekeeping jobs assigned to them OR unassigned housekeeping jobs
+      orders = allOrders.filter((o) => o.service_team === "HOUSEKEEPING" || o.assigned_to === user.id);
     } else {
       // Residents can only view work orders created by them or matching their assignments
       const { data: person } = await supabase

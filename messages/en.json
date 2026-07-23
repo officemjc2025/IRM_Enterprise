@@ -299,5 +299,26 @@
     "changeUnit": "Change Unit",
     "moveOut": "Move Out",
     "reactivate": "Reactivate Assignment"
+  },
+  "staff": {
+    "title": "Staff Management",
+    "createStaff": "Create Staff",
+    "editStaff": "Edit Staff",
+    "noStaffFound": "No staff members found.",
+    "searchPlaceholder": "Search by employee code, name, email, phone...",
+    "employeeCode": "Employee Code",
+    "fullName": "Full Name",
+    "displayName": "Display Name",
+    "role": "Role",
+    "department": "Department",
+    "property": "Property",
+    "accountStatus": "Account Status",
+    "invitationStatus": "Invitation Status",
+    "disableStaff": "Disable Account",
+    "enableStaff": "Enable Account",
+    "resetPassword": "Reset Password",
+    "sendInvitation": "Send Invitation",
+    "activate": "Activate",
+    "deactivate": "Deactivate"
   }
 }

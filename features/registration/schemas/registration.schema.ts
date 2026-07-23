@@ -12,7 +12,7 @@ export const createRegistrationRequestSchema = z.object({
   person_id: z.string().uuid("Person ID must be a valid UUID").nullable().optional(),
   registration_type: z.nativeEnum(RegistrationType, {
     message: "Invalid registration type"
-  }),
+  }).optional().default(RegistrationType.RESIDENT),
   relationship: z.nativeEnum(RegistrationRelationship, {
     message: "Invalid relationship type"
   }),
@@ -41,4 +41,21 @@ export const updateRegistrationRequestSchema = z.object({
     message: "Invalid registration status"
   }).optional(),
   remarks: z.string().nullable().optional(),
+});
+
+export const updateRegistrationSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  maintenance_message: z.string().nullable().optional(),
+  allow_owner: z.boolean().optional(),
+  allow_co_owner: z.boolean().optional(),
+  allow_resident: z.boolean().optional(),
+  allow_tenant: z.boolean().optional(),
+  allow_family_member: z.boolean().optional(),
+  allow_technician: z.boolean().optional(),
+  allow_housekeeping: z.boolean().optional(),
+  allow_security: z.boolean().optional(),
+  allow_committee: z.boolean().optional(),
+  allow_staff: z.boolean().optional(),
+  activation_method: z.enum(["SUPABASE_EMAIL", "TEMP_PASSWORD", "MANUAL"]).optional(),
+  email_notifications_enabled: z.boolean().optional(),
 });

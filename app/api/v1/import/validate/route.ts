@@ -43,7 +43,322 @@ export async function POST(request: Request) {
 
     const supabase = await createClient();
 
-    // 1. Fetch properties
+    if (moduleName === "staff") {
+      const { data: dbProperties } = await supabase
+        .from("properties")
+        .select("id, property_code, property_name_th, property_name_en")
+        .is("deleted_at", null);
+      
+      const propertyMap = new Map<string, any>();
+      dbProperties?.forEach(p => {
+        if (p.property_code) {
+          propertyMap.set(p.property_code.trim().toUpperCase(), p);
+        }
+      });
+
+      const { data: dbProfiles } = await supabase
+        .from("profiles")
+        .select("id, email, phone, role, person_id, department, status, account_status, photo_url")
+        .is("deleted_at", null);
+
+      const { data: dbPersons } = await supabase
+        .from("persons")
+        .select("id, person_code, first_name, last_name")
+        .is("deleted_at", null);
+
+
+      
+      const personIdToCodeMap = new Map<string, string>();
+      dbPersons?.forEach(p => {
+        if (p.person_code) {
+          personIdToCodeMap.set(p.id, p.person_code);
+        }
+      });
+
+      const batchEmails = new Set<string>();
+      const batchPhones = new Set<string>();
+      const batchCodes = new Set<string>();
+
+      const results: any[] = [];
+      const allErrors: ValidationError[] = [];
+
+      let staffCreateCount = 0;
+      let staffUpdateCount = 0;
+      let staffErrorCount = 0;
+
+      rows.forEach((row, index) => {
+        const rowNumber = index + 2;
+        const errors: ValidationError[] = [];
+        const conflicts: string[] = [];
+        const normalizedData: Record<string, any> = {};
+
+        Object.entries(mapping).forEach(([header, field]) => {
+          if (!field) return;
+          const rawValue = row[header];
+          let val = rawValue !== null && rawValue !== undefined ? String(rawValue).trim() : "";
+          val = val.replace(/\s+/g, " ");
+
+          if (field === "email") {
+            val = val.toLowerCase();
+          } else if (field === "employee_code") {
+            val = val.toUpperCase();
+          } else if (field === "property_code") {
+            val = val.toUpperCase();
+          }
+          normalizedData[field] = val || null;
+        });
+
+        // 1. Required Field Validations
+        if (!normalizedData.first_name) {
+          errors.push({
+            rowNumber,
+            column: reverseMapping.first_name || "first_name",
+            message: "First Name is required",
+            severity: "error"
+          });
+        }
+        if (!normalizedData.last_name) {
+          errors.push({
+            rowNumber,
+            column: reverseMapping.last_name || "last_name",
+            message: "Last Name is required",
+            severity: "error"
+          });
+        }
+        if (!normalizedData.role) {
+          errors.push({
+            rowNumber,
+            column: reverseMapping.role || "role",
+            message: "Role is required",
+            severity: "error"
+          });
+        } else {
+          const validRoles = [
+            "super_admin", "admin", "property_admin", "office", 
+            "security", "technician", "housekeeping", "committee"
+          ];
+          if (!validRoles.includes(normalizedData.role.toLowerCase())) {
+            errors.push({
+              rowNumber,
+              column: reverseMapping.role || "role",
+              message: `Invalid role '${normalizedData.role}'. Must be one of: ${validRoles.join(", ")}`,
+              severity: "error"
+            });
+          }
+        }
+
+        // Email validation
+        const emailVal = normalizedData.email;
+        if (!emailVal) {
+          errors.push({
+            rowNumber,
+            column: reverseMapping.email || "email",
+            message: "Email is required",
+            severity: "error"
+          });
+        } else {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(emailVal)) {
+            errors.push({
+              rowNumber,
+              column: reverseMapping.email || "email",
+              message: `Invalid email format: '${emailVal}'`,
+              severity: "error"
+            });
+          } else {
+            // Batch duplicate check
+            if (batchEmails.has(emailVal)) {
+              errors.push({
+                rowNumber,
+                column: reverseMapping.email || "email",
+                message: `Duplicate email '${emailVal}' in batch`,
+                severity: "error"
+              });
+            } else {
+              batchEmails.add(emailVal);
+            }
+          }
+        }
+
+        // Phone validation
+        const phoneVal = normalizedData.phone;
+        if (phoneVal) {
+          const normPhone = normalizePhone(phoneVal);
+          if (normPhone) {
+            if (batchPhones.has(normPhone)) {
+              errors.push({
+                rowNumber,
+                column: reverseMapping.phone || "phone",
+                message: `Duplicate phone number '${phoneVal}' in batch`,
+                severity: "error"
+              });
+            } else {
+              batchPhones.add(normPhone);
+            }
+          }
+        }
+
+        // Department validation
+        const deptVal = normalizedData.department;
+        if (deptVal) {
+          const validDepts = ["Administration", "Office", "Engineering", "Housekeeping", "Security", "Committee"];
+          const trimmed = deptVal.trim();
+          const matched = validDepts.find(d => d.toLowerCase() === trimmed.toLowerCase());
+          if (!matched) {
+            errors.push({
+              rowNumber,
+              column: reverseMapping.department || "department",
+              message: `Department must be one of: ${validDepts.join(", ")}`,
+              severity: "error"
+            });
+          } else {
+            normalizedData.department = matched;
+          }
+        }
+
+        // Property Code validation
+        const propCode = normalizedData.property_code;
+        if (propCode) {
+          const resolvedProperty = propertyMap.get(propCode.toUpperCase());
+          if (!resolvedProperty) {
+            errors.push({
+              rowNumber,
+              column: reverseMapping.property_code || "property_code",
+              message: `Property Code '${propCode}' not found in database`,
+              severity: "error"
+            });
+          } else {
+            normalizedData.property_id = resolvedProperty.id;
+            normalizedData.property_name_th = resolvedProperty.property_name_th;
+            normalizedData.property_name_en = resolvedProperty.property_name_en;
+          }
+        }
+
+        // Employee Code Validation
+        const empCode = normalizedData.employee_code;
+        if (empCode) {
+          if (batchCodes.has(empCode)) {
+            errors.push({
+              rowNumber,
+              column: reverseMapping.employee_code || "employee_code",
+              message: `Duplicate Employee Code '${empCode}' in batch`,
+              severity: "error"
+            });
+          } else {
+            batchCodes.add(empCode);
+          }
+        }
+
+        // 2. Hardened Duplicate Resolution Priority & Conflict detection
+        // Priority: 1 Employee Code, 2 Email, 3 Phone, 4 Name match
+        let matchedProfile: any = null;
+
+        // Priority 1: Code match
+        if (empCode) {
+          const matchedPerson = dbPersons?.find(p => p.person_code?.toUpperCase() === empCode);
+          if (matchedPerson) {
+            matchedProfile = dbProfiles?.find(p => p.person_id === matchedPerson.id);
+          }
+        }
+
+        // Priority 2: Email match
+        if (!matchedProfile && emailVal) {
+          matchedProfile = dbProfiles?.find(p => p.email.toLowerCase() === emailVal.toLowerCase());
+        }
+
+        // Priority 3: Phone match
+        if (!matchedProfile && phoneVal) {
+          const normPhone = normalizePhone(phoneVal);
+          if (normPhone) {
+            matchedProfile = dbProfiles?.find(p => p.phone && normalizePhone(p.phone) === normPhone);
+          }
+        }
+
+        // Priority 4: Existing Person (First + Last Name)
+        if (!matchedProfile && normalizedData.first_name && normalizedData.last_name) {
+          const fName = String(normalizedData.first_name).trim().toLowerCase();
+          const lName = String(normalizedData.last_name).trim().toLowerCase();
+          const matchedPerson = dbPersons?.find(p => 
+            p.first_name?.trim().toLowerCase() === fName && 
+            p.last_name?.trim().toLowerCase() === lName
+          );
+          if (matchedPerson) {
+            matchedProfile = dbProfiles?.find(p => p.person_id === matchedPerson.id);
+          }
+        }
+
+        // Detect conflicts separately from validation errors
+        if (matchedProfile) {
+          // Email mismatch (matched by code/phone/name but emails differ)
+          if (emailVal && matchedProfile.email.toLowerCase() !== emailVal.toLowerCase()) {
+            conflicts.push(`Conflict: Excel row email '${emailVal}' does not match existing user email '${matchedProfile.email}' for the matched staff record.`);
+          }
+          // Immutable code check
+          const currentCode = personIdToCodeMap.get(matchedProfile.person_id || "");
+          if (currentCode && empCode && empCode !== currentCode.toUpperCase()) {
+            errors.push({
+              rowNumber,
+              column: reverseMapping.employee_code || "employee_code",
+              message: `Employee Code is immutable after creation. Cannot change from '${currentCode}' to '${empCode}'`,
+              severity: "error"
+            });
+          }
+        }
+
+        // Determine Action
+        const hasErrors = errors.some(e => e.severity === "error") || conflicts.length > 0;
+        let action = "CREATE";
+        if (hasErrors) {
+          action = "ERROR";
+          staffErrorCount++;
+        } else {
+          if (matchedProfile) {
+            action = "UPDATE";
+            staffUpdateCount++;
+          } else {
+            action = "CREATE";
+            staffCreateCount++;
+          }
+        }
+
+        normalizedData.action = action;
+
+        results.push({
+          rowNumber,
+          normalizedData,
+          errors,
+          conflicts
+        });
+        allErrors.push(...errors);
+      });
+
+      const summary = {
+        totalRows: rows.length,
+        validRows: staffCreateCount + staffUpdateCount,
+        warningRows: allErrors.filter(e => e.severity === "warning").length,
+        errorRows: staffErrorCount,
+        importReady: staffErrorCount === 0 && rows.length > 0
+      };
+
+      const previewStats = {
+        units: { create: 0, update: 0, match: 0 },
+        persons: { create: 0, match: 0 },
+        ownerships: { create: 0, update: 0 },
+        occupancies: { create: 0, update: 0 },
+        meters: { create: 0, update: 0 },
+        staff: { create: staffCreateCount, update: staffUpdateCount, error: staffErrorCount }
+      };
+
+      return NextResponse.json({
+        success: true,
+        summary,
+        results,
+        allErrors,
+        completeness: { unit: 0, owner: 0, resident: 0, meter: 0 },
+        previewStats
+      });
+    }
+
     const { data: propertiesData } = await supabase
       .from("properties")
       .select("id, property_code")

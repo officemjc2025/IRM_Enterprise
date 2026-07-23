@@ -1,5 +1,6 @@
 import * as workOrderRepository from "@/repositories/work-order/work-order.repository";
-import { WorkOrder, WorkOrderStatus, CreateWorkOrderDto, UpdateWorkOrderDto } from "@/features/work-order/types/work-order.types";
+import { WorkOrder, WorkOrderStatus, CreateWorkOrderDto, UpdateWorkOrderDto, WorkOrderCategory } from "@/features/work-order/types/work-order.types";
+import { workflowService, WorkflowEvent } from "@/services/workflow/workflow.service";
 
 const ALLOWED_TRANSITIONS: Record<WorkOrderStatus, WorkOrderStatus[]> = {
   NEW: ["ASSIGNED", "CANCELLED"],
@@ -85,7 +86,27 @@ export const workOrderService = {
       updatePayload.status = "ASSIGNED";
     }
 
-    return workOrderRepository.update(id, updatePayload);
+    const updated = await workOrderRepository.update(id, updatePayload);
+    if (updated && dto.status === "COMPLETED") {
+      if (updated.category === WorkOrderCategory.CLEANING) {
+        await workflowService.handleEvent(WorkflowEvent.CLEANING_COMPLETE, {
+          unitId: updated.unit_id,
+          propertyId: updated.property_id,
+          actorId: dto.updated_by || "system",
+          stayId: updated.stay_id,
+          occupancyId: updated.occupancy_id,
+        });
+      } else if (updated.category === WorkOrderCategory.INSPECTION) {
+        await workflowService.handleEvent(WorkflowEvent.INSPECTION_PASS, {
+          unitId: updated.unit_id,
+          propertyId: updated.property_id,
+          actorId: dto.updated_by || "system",
+          stayId: updated.stay_id,
+          occupancyId: updated.occupancy_id,
+        });
+      }
+    }
+    return updated;
   },
 
   async closeWorkOrder(id: string, updatedBy?: string | null): Promise<boolean> {

@@ -41,7 +41,20 @@ export type CanonicalField =
   | "status"
   | "water_meter"
   | "electricity_meter"
-  | "resident_name";
+  | "resident_name"
+  | "employee_code"
+  | "first_name"
+  | "last_name"
+  | "role"
+  | "department"
+  | "team"
+  | "language"
+  | "active"
+  | "photo_url"
+  | "prefix"
+  | "nickname"
+  | "account_status"
+  | "send_invitation";
 
 export const CANONICAL_FIELDS: CanonicalField[] = [
   "property_code",
@@ -71,6 +84,19 @@ export const CANONICAL_FIELDS: CanonicalField[] = [
   "water_meter",
   "electricity_meter",
   "resident_name",
+  "employee_code",
+  "first_name",
+  "last_name",
+  "role",
+  "department",
+  "team",
+  "language",
+  "active",
+  "photo_url",
+  "prefix",
+  "nickname",
+  "account_status",
+  "send_invitation",
 ];
 
 export type ColumnMapping = Record<string, CanonicalField | "">;

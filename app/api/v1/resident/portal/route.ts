@@ -17,14 +17,49 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const impersonateEmail = searchParams.get("impersonate");
 
-    // Retrieve user profile to check role
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, account_status, is_active")
       .eq("id", user.id)
       .single();
 
-    const isAdmin = profile && ["admin", "super_admin", "property_admin"].includes(profile.role);
+    if (!profile) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized: Profile not found." },
+        { status: 401 }
+      );
+    }
+
+    if (!profile.is_active) {
+      return NextResponse.json(
+        { success: false, message: "Access Denied: Your account is inactive." },
+        { status: 403 }
+      );
+    }
+
+    if (!profile.account_status) {
+      return NextResponse.json(
+        { success: false, message: "Access Denied: Configuration Error." },
+        { status: 403 }
+      );
+    }
+
+    if (profile.account_status !== "ACTIVE") {
+      return NextResponse.json(
+        { success: false, message: `Access Denied: Your account status is ${profile.account_status}.` },
+        { status: 403 }
+      );
+    }
+
+    const allowedResidentRoles = ["super_admin", "admin", "resident", "owner", "co_owner", "tenant", "committee"];
+    if (!allowedResidentRoles.includes(profile.role)) {
+      return NextResponse.json(
+        { success: false, message: "Forbidden: You are not authorized to access the resident portal." },
+        { status: 403 }
+      );
+    }
+
+    const isAdmin = ["admin", "super_admin"].includes(profile.role);
 
     let targetUserId = user.id;
 

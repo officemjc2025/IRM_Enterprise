@@ -1,31 +1,16 @@
 import { NextResponse } from "next/server";
 import { visitorService } from "@/services/visitor/visitor.service";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthorizedUnitScope } from "@/lib/auth/scope";
 import { Visitor } from "@/features/visitor/types/visitor.types";
 
 export async function GET(request: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, message: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+    const scope = await getAuthorizedUnitScope(supabase, undefined, request);
 
     const { searchParams } = new URL(request.url);
     const filterType = searchParams.get("filter") || "today"; // 'today', 'queue', 'history'
-
-    // Retrieve user profile to check role
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    const isAdmin = profile && (profile.role === "admin" || profile.role === "super_admin" || profile.role === "property_admin");
 
     let visitors: Visitor[] = [];
     if (filterType === "queue") {
@@ -36,30 +21,14 @@ export async function GET(request: Request) {
       visitors = await visitorService.getTodayVisitors();
     }
 
-    // Security check: Residents can only view their own visitor requests
-    if (!isAdmin) {
-      // Find person via profile link
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("person_id")
-        .eq("id", user.id)
-        .single();
-
-      const personId = prof?.person_id;
-
-      if (!personId) {
+    // Security check: Non-admins can only view their authorized visitor requests
+    if (!scope.isFullScope) {
+      if (!scope.assignmentIds || scope.assignmentIds.length === 0) {
         visitors = [];
       } else {
-        // Find resident assignments
-        const { data: assignments } = await supabase
-          .from("resident_assignments")
-          .select("id")
-          .eq("person_id", personId);
-
-        const assignmentIds = (assignments || []).map((a) => a.id);
-        
-        visitors = visitors.filter((v) => 
-          v.resident_assignment_id && assignmentIds.includes(v.resident_assignment_id)
+        visitors = visitors.filter((v) =>
+          (v.resident_assignment_id && scope.assignmentIds.includes(v.resident_assignment_id)) ||
+          (v.resident_assignment?.unit_id && scope.authorizedUnitIds.includes(v.resident_assignment.unit_id))
         );
       }
     }
@@ -70,63 +39,28 @@ export async function GET(request: Request) {
       data: visitors,
     });
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
     const message = error instanceof Error ? error.message : "Failed to retrieve visitors";
-    return NextResponse.json(
-      { success: false, message },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, message: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+    const scope = await getAuthorizedUnitScope(supabase, undefined, request);
 
     const body = await request.json();
-    
-    // Security check: Resident can only request for their own assignment
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
 
-    const isAdmin = profile && (profile.role === "admin" || profile.role === "super_admin" || profile.role === "property_admin");
+    // Security check: Resident can only request for their authorized assignment
+    if (!scope.isFullScope) {
+      const isAssignmentValid = body.resident_assignment_id && scope.assignmentIds.includes(body.resident_assignment_id);
 
-    if (!isAdmin) {
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("person_id")
-        .eq("id", user.id)
-        .single();
-
-      const personId = prof?.person_id;
-
-      if (!personId) {
+      if (!isAssignmentValid) {
         return NextResponse.json(
-          { success: false, message: "Resident profile not linked to a registered person" },
-          { status: 400 }
-        );
-      }
-
-      const { data: assignment } = await supabase
-        .from("resident_assignments")
-        .select("id")
-        .eq("id", body.resident_assignment_id)
-        .eq("person_id", personId)
-        .maybeSingle();
-
-      if (!assignment) {
-        return NextResponse.json(
-          { success: false, message: "Invalid resident assignment specified" },
+          { success: false, message: "Forbidden: Invalid or unauthorized resident assignment specified" },
           { status: 403 }
         );
       }
@@ -134,7 +68,7 @@ export async function POST(request: Request) {
 
     const visitor = await visitorService.createVisitor({
       ...body,
-      created_by: user.id,
+      created_by: scope.profileId,
     });
 
     return NextResponse.json({
@@ -143,10 +77,10 @@ export async function POST(request: Request) {
       data: visitor,
     });
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
     const message = error instanceof Error ? error.message : "Failed to create visitor request";
-    return NextResponse.json(
-      { success: false, message },
-      { status: 400 }
-    );
+    return NextResponse.json({ success: false, message }, { status: 400 });
   }
 }

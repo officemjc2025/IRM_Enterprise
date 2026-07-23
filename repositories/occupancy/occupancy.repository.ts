@@ -3,6 +3,8 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { Occupancy, CreateOccupancyDto, UpdateOccupancyDto, OccupancyType } from "@/features/occupancy/types/occupancy.types";
 import { Status } from "@/shared/enums/status";
 
+import { AuthorizationScope } from "@/lib/auth/scope";
+
 async function getSupabase() {
   if (typeof window === "undefined") {
     return await createServerClient();
@@ -51,6 +53,41 @@ function mapToOccupancy(row: OccupancyDbRow): Occupancy {
     unit: row.unit || null,
     person: row.person || null,
   };
+}
+
+export async function findByScope(scope: AuthorizationScope): Promise<Occupancy[]> {
+  if (scope.isFullScope) {
+    return findAll();
+  }
+
+  if (!scope.authorizedUnitIds || scope.authorizedUnitIds.length === 0) {
+    return [];
+  }
+
+  const supabase = await getSupabase();
+  const { data, error } = await supabase
+    .from("occupancy")
+    .select(`
+      *,
+      unit:unit_id (unit_number, building_code, floor),
+      person:person_id (first_name, last_name)
+    `)
+    .in("unit_id", scope.authorizedUnitIds)
+    .is("deleted_at", null);
+
+  if (error) {
+    console.error("Error finding occupancies by scope:", error);
+    return [];
+  }
+
+  return (data as OccupancyDbRow[] || []).map(mapToOccupancy);
+}
+
+export async function findByUnitIdAndScope(unitId: string, scope: AuthorizationScope): Promise<Occupancy[]> {
+  if (!scope.isUnitAuthorized(unitId)) {
+    return [];
+  }
+  return findByUnitId(unitId);
 }
 
 export async function findAll(): Promise<Occupancy[]> {

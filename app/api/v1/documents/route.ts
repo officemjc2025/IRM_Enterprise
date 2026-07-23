@@ -1,17 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthorizedUnitScope } from "@/lib/auth/scope";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, message: "Unauthorized" },
-        { status: 401 }
-      );
-    }
+    await getAuthorizedUnitScope(supabase, undefined, request);
 
     const { data, error } = await supabase
       .from("documents")
@@ -28,24 +22,21 @@ export async function GET() {
       data,
     });
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
     const message = error instanceof Error ? error.message : "Failed to retrieve documents";
-    return NextResponse.json(
-      { success: false, message },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    const scope = await getAuthorizedUnitScope(supabase, undefined, request);
 
-    if (authError || !user) {
-      return NextResponse.json(
-        { success: false, message: "Unauthorized" },
-        { status: 401 }
-      );
+    if (!scope.isFullScope) {
+      return NextResponse.json({ success: false, message: "Forbidden: Admin privileges required to upload documents." }, { status: 403 });
     }
 
     const { title, file_path } = await request.json();
@@ -77,10 +68,10 @@ export async function POST(request: Request) {
       data,
     });
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
     const message = error instanceof Error ? error.message : "Failed to register document";
-    return NextResponse.json(
-      { success: false, message },
-      { status: 400 }
-    );
+    return NextResponse.json({ success: false, message }, { status: 400 });
   }
 }

@@ -17,7 +17,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
   const auth = useContext(AuthContext);
-  const { t } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
+
+  useEffect(() => {
+    if (auth?.profile) {
+      const role = auth.profile.role;
+      const forceThai = ["office", "security", "technician", "housekeeping"].includes(role);
+      if (forceThai && language !== "th") {
+        setLanguage("th");
+      }
+    }
+  }, [auth?.profile, language, setLanguage]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -55,6 +65,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
     if (path.startsWith("/residents")) {
       return Permissions.ManageResident;
+    }
+    if (path.startsWith("/staff-management")) {
+      return Permissions.ManageStaff;
     }
     return null;
   };

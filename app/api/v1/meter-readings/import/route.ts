@@ -1,6 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+interface ExistingReading {
+  id: string;
+  meter_id: string;
+  status: string;
+  previous_reading: number;
+  unit_id: string;
+  utility_type: string;
+}
+
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
@@ -58,7 +67,7 @@ export async function POST(request: Request) {
       throw new Error(`Failed to load cycle readings: ${fetchReadingsErr?.message}`);
     }
 
-    const readingsMap = new Map(existingReadings.map(r => [r.id, r]));
+    const readingsMap = new Map<string, ExistingReading>((existingReadings as unknown as ExistingReading[] || []).map(r => [r.id, r]));
 
     // 3. Resolve active rate snapshot
     const todayStr = new Date().toISOString().split("T")[0];
@@ -85,7 +94,24 @@ export async function POST(request: Request) {
     const occupiedUnitIds = new Set(activeStays?.map(s => s.unit_id) || []);
 
     // 5. Server-side validation run (All-or-nothing check before any updates)
-    const validatedUpdates = [];
+    const validatedUpdates: Array<{
+      id: string;
+      before: ExistingReading;
+      data: {
+        current_reading: number;
+        usage_units: number;
+        rate_per_unit_snapshot: number;
+        calculated_amount: number;
+        treatment_rate_snapshot: number;
+        treatment_amount: number;
+        status: string;
+        recorded_at: string;
+        recorded_by: string;
+        anomaly_status: string;
+        anomaly_reason: string | null;
+        technician_note: string | null;
+      };
+    }> = [];
     const processedMeterIds = new Set<string>();
     const processedReadingIds = new Set<string>();
 

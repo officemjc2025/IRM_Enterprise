@@ -20,7 +20,9 @@ export type UnitOperationalStatus =
   | "OUT_OF_SERVICE"
   | "STAFF"
   | "MJC"
-  | "LOCKED";
+  | "LOCKED"
+  | "CLEANING"
+  | "INSPECTION";
 
 export const UNIT_OPERATIONAL_STATUSES: UnitOperationalStatus[] = [
   "OWNER_OCCUPIED",
@@ -35,6 +37,8 @@ export const UNIT_OPERATIONAL_STATUSES: UnitOperationalStatus[] = [
   "STAFF",
   "MJC",
   "LOCKED",
+  "CLEANING",
+  "INSPECTION",
 ];
 
 // Priority table: lower number = higher priority.
@@ -43,15 +47,17 @@ export const STATUS_PRIORITY: Record<UnitOperationalStatus, number> = {
   OUT_OF_SERVICE:  1,
   LOCKED:          2,
   MAINTENANCE:     3,
-  CHECKED_IN:      4,
-  CHECKING_IN:     5,
-  CHECKING_OUT:    6,
-  RESERVED:        7,
-  TENANT_OCCUPIED: 8,
-  OWNER_OCCUPIED:  9,
-  STAFF:           10,
-  MJC:             11,
-  VACANT:          12,
+  CLEANING:        4,
+  INSPECTION:      5,
+  CHECKED_IN:      6,
+  CHECKING_IN:     7,
+  CHECKING_OUT:    8,
+  RESERVED:        9,
+  TENANT_OCCUPIED: 10,
+  OWNER_OCCUPIED:  11,
+  STAFF:           12,
+  MJC:             13,
+  VACANT:          14,
 };
 
 export const STATUS_LABEL_EN: Record<UnitOperationalStatus, string> = {
@@ -67,6 +73,8 @@ export const STATUS_LABEL_EN: Record<UnitOperationalStatus, string> = {
   STAFF:           "Staff",
   MJC:             "MJC",
   LOCKED:          "Locked",
+  CLEANING:        "Cleaning",
+  INSPECTION:      "Inspection",
 };
 
 export const STATUS_LABEL_TH: Record<UnitOperationalStatus, string> = {
@@ -82,6 +90,8 @@ export const STATUS_LABEL_TH: Record<UnitOperationalStatus, string> = {
   STAFF:           "เจ้าหน้าที่",
   MJC:             "MJC / นิติบุคคล",
   LOCKED:          "ล็อคห้อง",
+  CLEANING:        "ทำความสะอาด",
+  INSPECTION:      "ตรวจห้อง",
 };
 
 export const STATUS_ICON: Record<UnitOperationalStatus, string> = {
@@ -97,6 +107,8 @@ export const STATUS_ICON: Record<UnitOperationalStatus, string> = {
   STAFF:           "👷",
   MJC:             "🏢",
   LOCKED:          "🔒",
+  CLEANING:        "🧹",
+  INSPECTION:      "📋",
 };
 
 // HSL-tuned color tokens for status badges and dashboard cards
@@ -175,6 +187,18 @@ export const STATUS_COLOR: Record<
     card:        "bg-rose-50 dark:bg-rose-950/20",
     cardBorder:  "border-rose-200 dark:border-rose-800",
     dot:         "bg-rose-600",
+  },
+  CLEANING:        {
+    badge:       "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300",
+    card:        "bg-yellow-50 dark:bg-yellow-950/20",
+    cardBorder:  "border-yellow-200 dark:border-yellow-800",
+    dot:         "bg-yellow-500",
+  },
+  INSPECTION:      {
+    badge:       "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
+    card:        "bg-emerald-50 dark:bg-emerald-950/20",
+    cardBorder:  "border-emerald-200 dark:border-emerald-800",
+    dot:         "bg-emerald-500",
   },
 };
 

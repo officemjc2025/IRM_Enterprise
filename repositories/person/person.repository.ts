@@ -228,3 +228,26 @@ export async function findByPersonCode(personCode: string): Promise<Person | nul
   return data ? mapToPerson(data as PersonDbRow) : null;
 }
 
+export async function findByEmailOrPhone(email: string | null, phone: string | null): Promise<Person | null> {
+  const supabase = await getSupabase();
+  if (!email && !phone) return null;
+
+  let query = supabase
+    .from("person")
+    .select("*")
+    .is("deleted_at", null);
+
+  const conditions: string[] = [];
+  if (email) conditions.push(`email.eq.${email}`);
+  if (phone) conditions.push(`phone.eq.${phone}`);
+
+  query = query.or(conditions.join(","));
+
+  const { data, error } = await query.maybeSingle();
+  if (error) {
+    console.error("Error finding person by email/phone:", error);
+    return null;
+  }
+  return data ? mapToPerson(data as PersonDbRow) : null;
+}
+

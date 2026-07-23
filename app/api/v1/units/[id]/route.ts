@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { unitService } from "@/services/unit/unit.service";
 import { createClient } from "@/lib/supabase/server";
+import { getAuthorizedUnitScope } from "@/lib/auth/scope";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -10,45 +11,48 @@ interface Params {
 export async function GET(request: Request, { params }: Params) {
   try {
     const { id } = await params;
-    const unit = await unitService.getUnit(id);
-    if (!unit) {
-      return NextResponse.json(
-        { success: false, message: "Unit not found" },
-        { status: 404 }
-      );
+    const supabase = await createClient();
+    const scope = await getAuthorizedUnitScope(supabase, undefined, request);
+
+    if (!scope.isUnitAuthorized(id)) {
+      const exists = await unitService.getUnit(id);
+      if (!exists) {
+        return NextResponse.json({ success: false, message: "Unit not found" }, { status: 404 });
+      }
+      return NextResponse.json({ success: false, message: "Forbidden: You are not authorized to view this unit." }, { status: 403 });
     }
+
+    const unit = await unitService.getUnitByScope(id, scope);
+    if (!unit) {
+      return NextResponse.json({ success: false, message: "Unit not found" }, { status: 404 });
+    }
+
     return NextResponse.json({
       success: true,
       message: "Unit retrieved successfully",
       data: unit,
     });
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
     const message = error instanceof Error ? error.message : "Failed to retrieve unit";
-    return NextResponse.json(
-      { success: false, message },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }
 
 export async function PATCH(request: Request, { params }: Params) {
   try {
     const { id } = await params;
-    const body = await request.json();
-
     const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    const scope = await getAuthorizedUnitScope(supabase, undefined, request);
+
+    if (!scope.isFullScope) {
+      return NextResponse.json({ success: false, message: "Forbidden: Admin privileges required to update units." }, { status: 403 });
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    const isSuperAdmin = profile?.role === "super_admin";
+    const body = await request.json();
+    const isSuperAdmin = scope.role === "super_admin";
 
     const currentUnit = await unitService.getUnit(id);
     if (!currentUnit) {
@@ -78,51 +82,54 @@ export async function PATCH(request: Request, { params }: Params) {
         action_type: "EDIT",
         changed_fields: changedFields,
         reason: "Super Admin override of immutable Master Data in Room Editor",
-        actor_id: user.id
+        actor_id: scope.profileId
       });
     }
 
     const unit = await unitService.updateUnit(id, body);
     if (!unit) {
-      return NextResponse.json(
-        { success: false, message: "Unit not found or update failed" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, message: "Unit not found or update failed" }, { status: 404 });
     }
+
     return NextResponse.json({
       success: true,
       message: "Unit updated successfully",
       data: unit,
     });
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
     const message = error instanceof Error ? error.message : "Failed to update unit";
-    return NextResponse.json(
-      { success: false, message },
-      { status: 400 }
-    );
+    return NextResponse.json({ success: false, message }, { status: 400 });
   }
 }
 
 export async function DELETE(request: Request, { params }: Params) {
   try {
     const { id } = await params;
+    const supabase = await createClient();
+    const scope = await getAuthorizedUnitScope(supabase, undefined, request);
+
+    if (!scope.isFullScope) {
+      return NextResponse.json({ success: false, message: "Forbidden: Admin privileges required to delete units." }, { status: 403 });
+    }
+
     const success = await unitService.archiveUnit(id);
     if (!success) {
-      return NextResponse.json(
-        { success: false, message: "Unit not found or archive failed" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, message: "Unit not found or archive failed" }, { status: 404 });
     }
+
     return NextResponse.json({
       success: true,
       message: "Unit archived successfully",
       data: null,
     });
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
     const message = error instanceof Error ? error.message : "Failed to archive unit";
-    return NextResponse.json(
-      { success: false, message },
-      { status: 400 }
-    );
+    return NextResponse.json({ success: false, message }, { status: 400 });
   }
 }

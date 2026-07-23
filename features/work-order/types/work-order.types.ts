@@ -13,6 +13,21 @@ export type WorkOrderStatus =
   | "CLOSED"
   | "CANCELLED";
 
+export enum WorkOrderCategory {
+  CLEANING = "CLEANING",
+  INSPECTION = "INSPECTION",
+  MAINTENANCE = "MAINTENANCE",
+  REPAIR = "REPAIR",
+  OTHER = "OTHER",
+}
+
+export enum WorkOrderServiceTeam {
+  TECHNICIAN = "TECHNICIAN",
+  HOUSEKEEPING = "HOUSEKEEPING",
+  INSPECTION_TEAM = "INSPECTION_TEAM",
+  SUPERVISOR = "SUPERVISOR",
+}
+
 export interface WorkOrderPhoto {
   id: string;
   work_order_id: string;
@@ -29,12 +44,15 @@ export interface WorkOrder {
   unit_id: string;
   resident_assignment_id: string | null;
   reservation_id?: string | null;
+  stay_id?: string | null;
+  occupancy_id?: string | null;
+  affects_operational_status?: boolean;
   category: string;
   title: string;
   description: string | null;
   priority: WorkOrderPriority;
   status: WorkOrderStatus;
-  service_team: "TECHNICIAN" | "HOUSEKEEPING";
+  service_team: WorkOrderServiceTeam | "TECHNICIAN" | "HOUSEKEEPING" | "INSPECTION_TEAM" | "SUPERVISOR";
   assigned_to: string | null;
   requested_at: string;
   scheduled_at: string | null;
@@ -95,12 +113,15 @@ export interface CreateWorkOrderDto {
   unit_id: string;
   resident_assignment_id?: string | null;
   reservation_id?: string | null;
+  stay_id?: string | null;
+  occupancy_id?: string | null;
+  affects_operational_status?: boolean;
   category: string;
   title: string;
   description?: string | null;
   priority?: WorkOrderPriority;
   status?: WorkOrderStatus;
-  service_team?: "TECHNICIAN" | "HOUSEKEEPING";
+  service_team?: WorkOrderServiceTeam | "TECHNICIAN" | "HOUSEKEEPING" | "INSPECTION_TEAM" | "SUPERVISOR";
   assigned_to?: string | null;
   scheduled_at?: string | null;
   created_by?: string | null;
@@ -111,9 +132,12 @@ export interface UpdateWorkOrderDto {
   title?: string;
   description?: string | null;
   reservation_id?: string | null;
+  stay_id?: string | null;
+  occupancy_id?: string | null;
+  affects_operational_status?: boolean;
   priority?: WorkOrderPriority;
   status?: WorkOrderStatus;
-  service_team?: "TECHNICIAN" | "HOUSEKEEPING";
+  service_team?: WorkOrderServiceTeam | "TECHNICIAN" | "HOUSEKEEPING" | "INSPECTION_TEAM" | "SUPERVISOR";
   assigned_to?: string | null;
   scheduled_at?: string | null;
   started_at?: string | null;

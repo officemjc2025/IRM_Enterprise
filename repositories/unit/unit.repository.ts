@@ -5,6 +5,8 @@ import { Status } from "@/shared/enums/status";
 import { UnitOperationalStatus } from "@/shared/enums/unit-operational-status";
 import { compareUnitNumbers } from "@/shared/utils/unit";
 
+import { AuthorizationScope } from "@/lib/auth/scope";
+
 async function getSupabase() {
   if (typeof window === "undefined") {
     return await createServerClient();
@@ -44,6 +46,38 @@ function mapToUnit(row: UnitDbRow): Unit {
     created_by: row.created_by,
     updated_by: row.updated_by,
   };
+}
+
+export async function findByScope(scope: AuthorizationScope): Promise<Unit[]> {
+  if (scope.isFullScope) {
+    return findAll();
+  }
+
+  if (!scope.authorizedUnitIds || scope.authorizedUnitIds.length === 0) {
+    return [];
+  }
+
+  const supabase = await getSupabase();
+  const { data, error } = await supabase
+    .from("unit")
+    .select("*")
+    .in("id", scope.authorizedUnitIds)
+    .is("deleted_at", null);
+
+  if (error) {
+    console.error("Error finding units by scope:", error);
+    return [];
+  }
+
+  const units = (data as UnitDbRow[] || []).map(mapToUnit);
+  return units.sort((a, b) => compareUnitNumbers(a.unit_number, b.unit_number));
+}
+
+export async function findByIdAndScope(id: string, scope: AuthorizationScope): Promise<Unit | null> {
+  if (!scope.isUnitAuthorized(id)) {
+    return null;
+  }
+  return findById(id);
 }
 
 export async function findAll(): Promise<Unit[]> {

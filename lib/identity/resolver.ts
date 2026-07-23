@@ -7,6 +7,10 @@ export interface IdentityScope {
     role: string;
     status: string;
     property_id: string | null;
+    account_status: string | null;
+    is_active: boolean;
+    department: string | null;
+    team: string | null;
   };
   person: {
     id: string;
@@ -32,7 +36,7 @@ export async function resolveIdentity(supabase: SupabaseClient, userId: string):
   // 1. Get profile
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
-    .select("id, email, role, status, property_id, person_id")
+    .select("id, email, role, status, property_id, person_id, account_status, is_active, department, team")
     .eq("id", userId)
     .single();
 
@@ -48,7 +52,11 @@ export async function resolveIdentity(supabase: SupabaseClient, userId: string):
         email: profile.email,
         role: profile.role,
         status: profile.status,
-        property_id: profile.property_id
+        property_id: profile.property_id,
+        account_status: profile.account_status,
+        is_active: !!profile.is_active,
+        department: profile.department,
+        team: profile.team
       },
       person: null,
       assignments: []
@@ -71,7 +79,11 @@ export async function resolveIdentity(supabase: SupabaseClient, userId: string):
         email: profile.email,
         role: profile.role,
         status: profile.status,
-        property_id: profile.property_id
+        property_id: profile.property_id,
+        account_status: profile.account_status,
+        is_active: !!profile.is_active,
+        department: profile.department,
+        team: profile.team
       },
       person: null,
       assignments: []
@@ -126,7 +138,23 @@ export async function resolveIdentity(supabase: SupabaseClient, userId: string):
     } | null;
   }
 
-  const mappedAssignments = ((assignments as unknown as RawAssignmentRow[]) || []).map((a) => ({
+  const rawAssignments = (assignments as unknown as RawAssignmentRow[]) || [];
+  
+  // Deduplicate assignments by unit_id (prioritizing primary or first active assignment)
+  const seenUnitIds = new Set<string>();
+  const deduplicatedList: RawAssignmentRow[] = [];
+
+  // Sort so primary assignments come first
+  const sortedRaw = [...rawAssignments].sort((a, b) => Number(b.is_primary) - Number(a.is_primary));
+
+  for (const a of sortedRaw) {
+    if (!seenUnitIds.has(a.unit_id)) {
+      seenUnitIds.add(a.unit_id);
+      deduplicatedList.push(a);
+    }
+  }
+
+  const mappedAssignments = deduplicatedList.map((a) => ({
     id: a.id,
     unit_id: a.unit_id,
     unit_number: a.unit?.unit_number || "",
@@ -143,7 +171,11 @@ export async function resolveIdentity(supabase: SupabaseClient, userId: string):
       email: profile.email,
       role: profile.role,
       status: profile.status,
-      property_id: profile.property_id
+      property_id: profile.property_id,
+      account_status: profile.account_status,
+      is_active: !!profile.is_active,
+      department: profile.department,
+      team: profile.team
     },
     person,
     assignments: mappedAssignments

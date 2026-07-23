@@ -2,9 +2,20 @@ import * as residentAssignmentRepository from "@/repositories/resident-assignmen
 import { ResidentAssignment, CreateResidentAssignmentDto, UpdateResidentAssignmentDto } from "@/features/resident-assignment/types/resident-assignment.types";
 import { Status } from "@/shared/enums/status";
 
+import { AuthorizationScope } from "@/lib/auth/scope";
+
 export const residentAssignmentService = {
   async getAssignments(): Promise<ResidentAssignment[]> {
     return residentAssignmentRepository.findAll();
+  },
+
+  async getAssignmentsByScope(scope: AuthorizationScope): Promise<ResidentAssignment[]> {
+    return residentAssignmentRepository.findByScope(scope);
+  },
+
+  async getAssignmentsByUnitAndScope(unitId: string, scope: AuthorizationScope): Promise<ResidentAssignment[]> {
+    if (!unitId) throw new Error("Unit ID is required");
+    return residentAssignmentRepository.findByUnitIdAndScope(unitId, scope);
   },
 
   async getAssignment(id: string): Promise<ResidentAssignment | null> {

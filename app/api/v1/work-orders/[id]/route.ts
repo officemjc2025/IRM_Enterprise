@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { workOrderService } from "@/services/work-order/work-order.service";
 import { createClient } from "@/lib/supabase/server";
 import { WorkOrder } from "@/features/work-order/types/work-order.types";
+import { workflowService, WorkflowEvent } from "@/services/workflow/workflow.service";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -35,7 +36,7 @@ export async function GET(request: Request, { params }: Params) {
       .eq("id", user.id)
       .single();
 
-    const isAdmin = profile && ["admin", "super_admin", "property_admin"].includes(profile.role);
+    const isAdmin = profile && ["admin", "super_admin", "property_admin", "office"].includes(profile.role);
     const isTechnician = profile && profile.role === "technician";
     const isHousekeeper = profile && profile.role === "housekeeping";
 
@@ -127,7 +128,7 @@ export async function PUT(request: Request, { params }: Params) {
       .eq("id", user.id)
       .single();
 
-    const isAdmin = profile && ["admin", "super_admin", "property_admin"].includes(profile.role);
+    const isAdmin = profile && ["admin", "super_admin", "property_admin", "office"].includes(profile.role);
     const isTechnician = profile && profile.role === "technician";
     const isHousekeeper = profile && profile.role === "housekeeping";
 
@@ -245,6 +246,26 @@ export async function PUT(request: Request, { params }: Params) {
       }
     }
 
+    if (updated && body.status === "COMPLETED") {
+      if (updated.category === "CLEANING") {
+        await workflowService.handleEvent(WorkflowEvent.CLEANING_COMPLETE, {
+          unitId: updated.unit_id,
+          propertyId: updated.property_id,
+          actorId: user.id,
+          stayId: updated.stay_id,
+          occupancyId: updated.occupancy_id,
+        });
+      } else if (updated.category === "INSPECTION") {
+        await workflowService.handleEvent(WorkflowEvent.INSPECTION_PASS, {
+          unitId: updated.unit_id,
+          propertyId: updated.property_id,
+          actorId: user.id,
+          stayId: updated.stay_id,
+          occupancyId: updated.occupancy_id,
+        });
+      }
+    }
+
     if (!isAdmin && updated) {
       updated.actual_cost = null;
     }
@@ -290,7 +311,7 @@ export async function DELETE(request: Request, { params }: Params) {
       .eq("id", user.id)
       .single();
 
-    const isAdmin = profile && ["admin", "super_admin", "property_admin"].includes(profile.role);
+    const isAdmin = profile && ["admin", "super_admin", "property_admin", "office"].includes(profile.role);
 
     if (!isAdmin) {
       return NextResponse.json(

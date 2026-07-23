@@ -42,6 +42,13 @@ export const navConfig: NavSection[] = [
     ]
   },
   {
+    section: "Administration",
+    items: [
+      { id: "staff-management", label: "Staff List", href: "/staff-management", icon: IconResidents },
+      { id: "staff-import", label: "Import Staff", href: "/staff-management/import", icon: IconDashboard },
+    ]
+  },
+  {
     section: "System",
     items: [
       { id: "dashboard", label: "Dashboard (Placeholder)", href: "/", icon: IconDashboard },

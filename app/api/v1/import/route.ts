@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { unitService } from "@/services/unit/unit.service";
 import { Unit, UpdateUnitDto } from "@/features/unit/types/unit.types";
 import { personService } from "@/services/person/person.service";
@@ -1184,6 +1185,518 @@ if (moduleName === "combined_metro") {
         summary: importResult.summary,
         warnings: Array.from(new Set(warnings)),
         elapsedTime: (elapsed / 1000).toFixed(2) + "s",
+      });
+    }
+
+    if (moduleName === "staff") {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+      }
+
+      const isDryRun = importStrategy === "dry_run";
+      const { importMode, postImportAction } = body;
+      const mode = importMode || "upsert"; // create_only, update_only, upsert
+      const actionOpt = postImportAction || "send_invitation"; // send_invitation, activate, skip
+
+      // 1. Fetch existing profiles/persons for duplication check
+      const { data: dbProfiles } = await supabase
+        .from("profiles")
+        .select("id, email, phone, role, person_id, photo_url, department, status, property_id, prefix, nickname, team, language, invitation_status")
+        .is("deleted_at", null);
+
+      const { data: dbPersons } = await supabase
+        .from("persons")
+        .select("id, person_code, first_name, last_name")
+        .is("deleted_at", null);
+
+      interface DbProfileRow {
+        id: string;
+        email: string;
+        phone: string | null;
+        role: string;
+        person_id: string | null;
+        photo_url: string | null;
+        department: string | null;
+        status: string;
+        property_id: string | null;
+        prefix?: string | null;
+        nickname?: string | null;
+        team?: string | null;
+        language?: string | null;
+        invitation_status?: string | null;
+        first_name?: string;
+        last_name?: string;
+        display_name?: string;
+      }
+
+      interface DbPersonRow {
+        id: string;
+        person_code: string | null;
+        first_name: string;
+        last_name: string;
+      }
+
+      const dbEmails = new Map<string, DbProfileRow>(); // email -> profile
+      (dbProfiles as unknown as DbProfileRow[])?.forEach(p => {
+        dbEmails.set(p.email.toLowerCase().trim(), p);
+      });
+
+      const dbEmployeeCodes = new Map<string, DbPersonRow>(); // code -> person
+      (dbPersons as unknown as DbPersonRow[])?.forEach(p => {
+        if (p.person_code) {
+          dbEmployeeCodes.set(p.person_code.toUpperCase().trim(), p);
+        }
+      });
+
+      const personIdToCodeMap = new Map<string, string>();
+      (dbPersons as unknown as DbPersonRow[])?.forEach(p => {
+        if (p.person_code) {
+          personIdToCodeMap.set(p.id, p.person_code);
+        }
+      });
+
+      function localNormalizePhone(phone: string | null | undefined): string | null {
+        if (!phone) return null;
+        const digits = phone.replace(/\D/g, "");
+        if (!digits) return null;
+
+        if (digits.startsWith("66") && digits.length === 11) {
+          return "0" + digits.substring(2);
+        }
+        if (digits.startsWith("66") && digits.length === 10) {
+          return "0" + digits.substring(2);
+        }
+        if (digits.length === 9 && (digits.startsWith("8") || digits.startsWith("9") || digits.startsWith("6"))) {
+          return "0" + digits;
+        }
+        return digits;
+      }
+
+      // Trackers for rollback
+      const createdAuthIds: string[] = [];
+      const createdPersonIds: string[] = [];
+      const createdProfileIds: string[] = [];
+      const updatedProfiles: { id: string; original: Record<string, unknown> }[] = [];
+      const updatedPersons: { id: string; original: Record<string, unknown> }[] = [];
+
+      let insertedCount = 0;
+      let updatedCount = 0;
+      let skippedCount = 0;
+
+      const adminClient = createAdminClient();
+
+      let batchId: string | null = null;
+      if (!isDryRun) {
+        const todayStr = new Date().toISOString().split("T")[0].replace(/-/g, ""); // YYYYMMDD
+        const pattern = `IMP-${todayStr}-`;
+        const { data: existingBatches } = await supabase
+          .from("import_batches")
+          .select("batch_name")
+          .like("batch_name", `${pattern}%`);
+
+        let maxNum = 0;
+        existingBatches?.forEach(b => {
+          if (b.batch_name) {
+            const suffix = b.batch_name.substring(pattern.length);
+            const num = parseInt(suffix, 10);
+            if (!isNaN(num) && num > maxNum) {
+              maxNum = num;
+            }
+          }
+        });
+        const nextNum = maxNum + 1;
+        const batchName = `${pattern}${String(nextNum).padStart(4, "0")}`;
+
+        const { data: batchData, error: batchError } = await supabase
+          .from("import_batches")
+          .insert({
+            batch_name: batchName,
+            module_name: "staff",
+            status: "PROCESSING",
+            summary: { total: payload.length, inserted: 0, updated: 0, skipped: 0, errors: 0 },
+            created_by: user.id
+          })
+          .select()
+          .single();
+        
+        if (batchError || !batchData) {
+          throw new Error(`Failed to create import batch record: ${batchError?.message}`);
+        }
+        batchId = batchData.id;
+      }
+
+      // Track assigned codes inside the batch to prevent internal race condition
+      const generatedCodesInBatch = new Set<string>();
+
+      try {
+        for (const item of payload) {
+          const emailVal = String(item.email || "").toLowerCase().trim();
+          const empCode = item.employee_code ? String(item.employee_code).toUpperCase().trim() : "";
+          const phoneVal = item.phone ? localNormalizePhone(item.phone) : null;
+          const roleVal = String(item.role || "office").toLowerCase().trim();
+
+          const existingProfile = dbEmails.get(emailVal);
+          const existingPersonByCode = empCode ? dbEmployeeCodes.get(empCode) : null;
+
+          // Determine matches
+          let matchedProfile = existingProfile;
+          if (!matchedProfile && existingPersonByCode) {
+            matchedProfile = dbProfiles?.find(p => p.person_id === existingPersonByCode.id);
+          }
+
+          if (matchedProfile) {
+            // Update mode checks
+            if (mode === "create_only") {
+              skippedCount++;
+              continue;
+            }
+
+            // Perform Update
+            const firstName = item.first_name || "";
+            const lastName = item.last_name || "";
+            const displayName = item.display_name || `${firstName} ${lastName}`;
+            const department = item.department || matchedProfile.department;
+            const propertyId = item.property_id || matchedProfile.property_id;
+            const photoUrl = item.photo_url || matchedProfile.photo_url;
+            const prefix = item.prefix || matchedProfile.prefix || null;
+            const nickname = item.nickname || matchedProfile.nickname || null;
+            const team = item.team || matchedProfile.team || null;
+            const language = item.language || matchedProfile.language || "th";
+            
+            // Lock Employee Code: check if they tried to change it
+            const currentCode = personIdToCodeMap.get(matchedProfile.person_id || "");
+            if (currentCode && empCode && empCode !== currentCode.toUpperCase()) {
+              throw new Error(`Employee Code is immutable after creation. Cannot change from '${currentCode}' to '${empCode}' for email '${emailVal}'`);
+            }
+
+            if (!isDryRun) {
+              // 1. Update Person (if linked)
+              if (matchedProfile.person_id) {
+                const { data: currentPerson } = await adminClient
+                  .from("persons")
+                  .select("*")
+                  .eq("id", matchedProfile.person_id)
+                  .single();
+
+                updatedPersons.push({ id: matchedProfile.person_id, original: currentPerson });
+
+                await adminClient
+                  .from("persons")
+                  .update({
+                    first_name: firstName,
+                    last_name: lastName,
+                    display_name: displayName,
+                    phone: phoneVal,
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq("id", matchedProfile.person_id);
+              }
+
+              // 2. Update Profile
+              const { data: currentProf } = await adminClient
+                .from("profiles")
+                .select("*")
+                .eq("id", matchedProfile.id)
+                .single();
+
+              updatedProfiles.push({ id: matchedProfile.id, original: currentProf });
+
+              const profilePayload: Record<string, unknown> = {
+                display_name: displayName,
+                full_name: `${firstName} ${lastName}`,
+                phone: phoneVal,
+                role: roleVal,
+                department,
+                property_id: propertyId || null,
+                photo_url: photoUrl,
+                prefix,
+                nickname,
+                team,
+                language,
+                updated_at: new Date().toISOString(),
+                updated_by: user.id
+              };
+
+              // Map status if active field exists
+              if (item.active !== undefined) {
+                const activeVal = String(item.active).toLowerCase().trim();
+                const isActive = activeVal === "true" || activeVal === "yes" || activeVal === "1" || activeVal === "active";
+                profilePayload.status = isActive ? "active" : "inactive";
+                profilePayload.account_status = isActive ? "ACTIVE" : "DISABLED";
+              }
+
+              await adminClient
+                .from("profiles")
+                .update(profilePayload)
+                .eq("id", matchedProfile.id);
+
+              // Update Supabase Auth user metadata
+              await adminClient.auth.admin.updateUserById(matchedProfile.id, {
+                user_metadata: { role: roleVal }
+              });
+            }
+
+            updatedCount++;
+
+          } else {
+            // Create Mode Checks
+            if (mode === "update_only") {
+              skippedCount++;
+              continue;
+            }
+
+            // Perform Create
+            const firstName = String(item.first_name || "").trim();
+            const lastName = String(item.last_name || "").trim();
+            const displayName = item.display_name ? String(item.display_name).trim() : `${firstName} ${lastName}`;
+            const department = item.department || null;
+            const propertyId = item.property_id || null;
+            const photoUrl = item.photo_url || null;
+
+            if (isDryRun) {
+              insertedCount++;
+              continue;
+            }
+
+            // Generate Employee Code if empty
+            let finalEmpCode = empCode;
+            if (!finalEmpCode) {
+              let prefix = "EMP";
+              const r = roleVal.toLowerCase().trim();
+              if (r === "super_admin") prefix = "SA";
+              else if (r === "admin") prefix = "ADM";
+              else if (r === "property_admin") prefix = "PAD";
+              else if (r === "office") prefix = "OFF";
+              else if (r === "security") prefix = "SEC";
+              else if (r === "technician") prefix = "TEC";
+              else if (r === "housekeeping") prefix = "HK";
+              else if (r === "committee") prefix = "COM";
+
+              let maxNum = 0;
+              const pattern = `${prefix}`;
+              
+              // Query max existing in DB matching the prefix followed by digits
+              const { data: existingCodes } = await adminClient
+                .from("persons")
+                .select("person_code")
+                .like("person_code", `${pattern}%`);
+              
+              const regex = new RegExp(`^${pattern}(\\d+)$`);
+              existingCodes?.forEach(pc => {
+                if (pc.person_code) {
+                  const match = pc.person_code.trim().match(regex);
+                  if (match) {
+                    const num = parseInt(match[1], 10);
+                    if (!isNaN(num) && num > maxNum) maxNum = num;
+                  }
+                }
+              });
+
+              // Increment based on what we've generated in this batch loop
+              let nextNum = maxNum + 1;
+              let trialCode = `${pattern}${String(nextNum).padStart(3, "0")}`;
+              while (generatedCodesInBatch.has(trialCode)) {
+                nextNum++;
+                trialCode = `${pattern}${String(nextNum).padStart(3, "0")}`;
+              }
+              finalEmpCode = trialCode;
+              generatedCodesInBatch.add(finalEmpCode);
+            }
+
+            // Determine if invitation email is enabled
+            const sendInvitationVal = item.send_invitation !== undefined
+              ? (String(item.send_invitation).toLowerCase() === "true" || String(item.send_invitation).toLowerCase() === "yes" || String(item.send_invitation) === "1")
+              : true;
+
+            const targetAccountStatus = item.account_status ? String(item.account_status).trim().toUpperCase() : "ACTIVE";
+
+            // 1. Create Supabase Auth account based on send_invitation column or action settings
+            let authId = "";
+            const isInviteAction = actionOpt === "send_invitation" && sendInvitationVal;
+            const isActivateAction = actionOpt === "activate" || targetAccountStatus === "ACTIVE";
+
+            if (isInviteAction) {
+              const { data: authData, error: createAuthError } = await adminClient.auth.admin.inviteUserByEmail(emailVal, {
+                data: { role: roleVal, force_password_change: true }
+              });
+              if (createAuthError || !authData?.user) {
+                throw new Error(`Auth Invite Failed for ${emailVal}: ${createAuthError?.message}`);
+              }
+              authId = authData.user.id;
+            } else if (isActivateAction) {
+              const { data: authData, error: createAuthError } = await adminClient.auth.admin.createUser({
+                email: emailVal,
+                email_confirm: true,
+                password: Math.random().toString(36).slice(-10),
+                user_metadata: { role: roleVal, force_password_change: false }
+              });
+              if (createAuthError || !authData?.user) {
+                throw new Error(`Auth Activation Failed for ${emailVal}: ${createAuthError?.message}`);
+              }
+              authId = authData.user.id;
+            } else {
+              // skip invitation email
+              const { data: authData, error: createAuthError } = await adminClient.auth.admin.createUser({
+                email: emailVal,
+                email_confirm: false,
+                password: Math.random().toString(36).slice(-10),
+                user_metadata: { role: roleVal, force_password_change: true }
+              });
+              if (createAuthError || !authData?.user) {
+                throw new Error(`Auth Creation Failed for ${emailVal}: ${createAuthError?.message}`);
+              }
+              authId = authData.user.id;
+            }
+            createdAuthIds.push(authId);
+
+            // 2. Create Person record
+            const { data: personData, error: createPersonError } = await adminClient
+              .from("persons")
+              .insert({
+                person_code: finalEmpCode,
+                first_name: firstName,
+                last_name: lastName,
+                display_name: displayName,
+                phone: phoneVal,
+                email: emailVal,
+                import_batch_id: batchId,
+                status: "ACTIVE"
+              })
+              .select("id")
+              .single();
+
+            if (createPersonError || !personData) {
+              throw new Error(`Person creation failed: ${createPersonError?.message}`);
+            }
+            createdPersonIds.push(personData.id);
+
+            // 3. Create Profile record (linking authId & personId)
+            const activeVal = item.active !== undefined ? String(item.active).toLowerCase().trim() : "";
+            const isActive = activeVal === "false" || activeVal === "no" || activeVal === "0" || activeVal === "inactive" ? false : true;
+
+            const profilePayload: Record<string, unknown> = {
+              id: authId,
+              person_id: personData.id,
+              property_id: propertyId || null,
+              email: emailVal,
+              display_name: displayName,
+              full_name: `${firstName} ${lastName}`,
+              phone: phoneVal,
+              role: roleVal,
+              department: department,
+              team: item.team || null,
+              prefix: item.prefix || null,
+              nickname: item.nickname || null,
+              language: item.language || "th",
+              photo_url: photoUrl,
+              invitation_status: isInviteAction ? "INVITED" : "NOT_SENT",
+              status: isActive ? "active" : "inactive",
+              account_status: isActivateAction && isActive ? "ACTIVE" : (isActive ? "PENDING" : "DISABLED"),
+              force_password_change: !isActivateAction,
+              import_batch_id: batchId,
+              created_by: user.id
+            };
+
+            const { error: createProfileError } = await adminClient
+              .from("profiles")
+              .insert(profilePayload);
+
+            if (createProfileError) {
+              throw new Error(`Profile creation failed: ${createProfileError.message}`);
+            }
+            createdProfileIds.push(authId);
+
+            insertedCount++;
+          }
+        }
+
+        // Update import batch record on success
+        if (batchId) {
+          await supabase
+            .from("import_batches")
+            .update({
+              status: "COMPLETED",
+              summary: {
+                total: payload.length,
+                inserted: insertedCount,
+                updated: updatedCount,
+                skipped: skippedCount,
+                errors: 0
+              }
+            })
+            .eq("id", batchId);
+        }
+
+      } catch (importErr: unknown) {
+        console.error("Staff import failed, executing batch rollback:", importErr);
+
+        // Transaction Rollback
+        // 1. Delete created profiles
+        if (createdProfileIds.length > 0) {
+          await adminClient.from("profiles").delete().in("id", createdProfileIds);
+        }
+        // 2. Delete created persons
+        if (createdPersonIds.length > 0) {
+          await adminClient.from("persons").delete().in("id", createdPersonIds);
+        }
+        // 3. Delete created auth users
+        for (const authId of createdAuthIds) {
+          await adminClient.auth.admin.deleteUser(authId);
+        }
+
+        // Restore updated records
+        for (const restoreItem of updatedProfiles) {
+          await adminClient.from("profiles").update(restoreItem.original).eq("id", restoreItem.id);
+        }
+        for (const restoreItem of updatedPersons) {
+          await adminClient.from("persons").update(restoreItem.original).eq("id", restoreItem.id);
+        }
+
+        if (batchId) {
+          await supabase
+            .from("import_batches")
+            .update({
+              status: "FAILED",
+              summary: {
+                total: payload.length,
+                inserted: 0,
+                updated: 0,
+                skipped: 0,
+                errors: payload.length
+              }
+            })
+            .eq("id", batchId);
+        }
+
+        const elapsed = Date.now() - startTime;
+        return NextResponse.json({
+          success: false,
+          message: importErr instanceof Error ? importErr.message : "Import failed. All changes rolled back.",
+          summary: {
+            inserted: 0,
+            updated: 0,
+            skipped: 0,
+            errors: payload.length,
+            elapsedTime: (elapsed / 1000).toFixed(2) + "s",
+          }
+        }, { status: 400 });
+      }
+
+      const elapsed = Date.now() - startTime;
+      return NextResponse.json({
+        success: true,
+        message: isDryRun
+          ? "✔ Dry run simulation completed successfully. Zero database writes performed."
+          : "✔ Staff import completed successfully",
+        isDryRun,
+        summary: {
+          inserted: insertedCount,
+          updated: updatedCount,
+          skipped: skippedCount,
+          errors: 0,
+          elapsedTime: (elapsed / 1000).toFixed(2) + "s"
+        }
       });
     }
 

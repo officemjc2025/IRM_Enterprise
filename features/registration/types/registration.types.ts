@@ -36,6 +36,14 @@ export enum InvitationSource {
   ADMIN = "ADMIN",
 }
 
+export interface StatusHistoryItem {
+  status: RegistrationStatus;
+  changed_at: string;
+  changed_by: string | null;
+  remarks: string | null;
+  rejection_reason?: string | null;
+}
+
 export interface RegistrationRequest {
   id: string;
   property_id: string;
@@ -68,6 +76,14 @@ export interface RegistrationRequest {
   reviewed_at: string | null;
   rejection_reason: string | null;
 
+  // Approval Activation Audit
+  approved_by: string | null;
+  approved_at: string | null;
+  account_created_at: string | null;
+  portal_enabled_at: string | null;
+  profile_id: string | null;
+  resident_assignment_id: string | null;
+
   // Snapshot Fields
   requested_unit_number: string;
   requested_property_name: string | null;
@@ -75,6 +91,9 @@ export interface RegistrationRequest {
   // Client Audit
   source_ip: string | null;
   user_agent: string | null;
+
+  // Status History
+  status_history: StatusHistoryItem[] | null;
 }
 
 export interface CreateRegistrationRequestDto {
@@ -100,6 +119,7 @@ export interface CreateRegistrationRequestDto {
   source_ip?: string | null;
   user_agent?: string | null;
   created_by?: string | null;
+  status_history?: StatusHistoryItem[] | null;
 }
 
 export interface UpdateRegistrationRequestDto {
@@ -109,4 +129,63 @@ export interface UpdateRegistrationRequestDto {
   rejection_reason?: string | null;
   remarks?: string | null;
   updated_by?: string | null;
+  status_history?: StatusHistoryItem[] | null;
+}
+
+export interface RegistrationSettings {
+  property_id: string;
+  enabled: boolean;
+  maintenance_message: string | null;
+  allow_owner: boolean;
+  allow_co_owner: boolean;
+  allow_resident: boolean;
+  allow_tenant: boolean;
+  allow_family_member: boolean;
+  allow_technician: boolean;
+  allow_housekeeping: boolean;
+  allow_security: boolean;
+  allow_committee: boolean;
+  allow_staff: boolean;
+  activation_method: "SUPABASE_EMAIL" | "TEMP_PASSWORD" | "MANUAL";
+  email_notifications_enabled: boolean;
+
+  // Transaction Standard
+  created_at: string;
+  created_by: string | null;
+  updated_at: string;
+  updated_by: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
+}
+
+export interface UpdateRegistrationSettingsDto {
+  enabled?: boolean;
+  maintenance_message?: string | null;
+  allow_owner?: boolean;
+  allow_co_owner?: boolean;
+  allow_resident?: boolean;
+  allow_tenant?: boolean;
+  allow_family_member?: boolean;
+  allow_technician?: boolean;
+  allow_housekeeping?: boolean;
+  allow_security?: boolean;
+  allow_committee?: boolean;
+  allow_staff?: boolean;
+  activation_method?: "SUPABASE_EMAIL" | "TEMP_PASSWORD" | "MANUAL";
+  email_notifications_enabled?: boolean;
+  updated_by?: string | null;
+}
+
+export interface RegistrationStats {
+  pending: number;
+  underReview: number;
+  approved: number;
+  rejected: number;
+  moreInfo: number;
+  today: number;
+  thisMonth: number;
+  websiteVisits: number;
+  totalRequests: number;
+  approvalRate: number;
+  averageApprovalTimeHours: number;
 }

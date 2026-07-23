@@ -1,9 +1,20 @@
 import * as occupancyRepository from "@/repositories/occupancy/occupancy.repository";
 import { Occupancy, CreateOccupancyDto, UpdateOccupancyDto, OCCUPANCY_TYPES } from "@/features/occupancy/types/occupancy.types";
 
+import { AuthorizationScope } from "@/lib/auth/scope";
+
 export const occupancyService = {
   async getOccupancies(): Promise<Occupancy[]> {
     return occupancyRepository.findAll();
+  },
+
+  async getOccupanciesByScope(scope: AuthorizationScope): Promise<Occupancy[]> {
+    return occupancyRepository.findByScope(scope);
+  },
+
+  async getOccupanciesByUnitAndScope(unitId: string, scope: AuthorizationScope): Promise<Occupancy[]> {
+    if (!unitId) throw new Error("Unit ID is required");
+    return occupancyRepository.findByUnitIdAndScope(unitId, scope);
   },
 
   async getOccupancy(id: string): Promise<Occupancy | null> {

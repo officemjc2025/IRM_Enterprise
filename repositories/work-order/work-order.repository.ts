@@ -1,6 +1,6 @@
 import { createClient as createBrowserClient } from "@/lib/supabase/client";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { WorkOrder, WorkOrderPriority, WorkOrderStatus, CreateWorkOrderDto, UpdateWorkOrderDto } from "@/features/work-order/types/work-order.types";
+import { WorkOrder, WorkOrderPriority, WorkOrderStatus, CreateWorkOrderDto, UpdateWorkOrderDto, WorkOrderServiceTeam } from "@/features/work-order/types/work-order.types";
 import { Person } from "@/features/person/types/person.types";
 import { Status } from "@/shared/enums/status";
 
@@ -18,6 +18,9 @@ interface WorkOrderDbRow {
   unit_id: string;
   resident_assignment_id: string | null;
   reservation_id: string | null;
+  stay_id: string | null;
+  occupancy_id: string | null;
+  affects_operational_status: boolean;
   category: string;
   title: string;
   description: string | null;
@@ -123,7 +126,7 @@ interface WorkOrderDbRow {
 }
 
 function mapToWorkOrder(row: WorkOrderDbRow): WorkOrder {
-  let mappedResidentAssignment = null;
+  let mappedResidentAssignment: Record<string, unknown> | null = null;
   
   if (row.resident_assignments) {
     const ra = row.resident_assignments;
@@ -161,12 +164,15 @@ function mapToWorkOrder(row: WorkOrderDbRow): WorkOrder {
     unit_id: row.unit_id,
     resident_assignment_id: row.resident_assignment_id,
     reservation_id: row.reservation_id,
+    stay_id: row.stay_id,
+    occupancy_id: row.occupancy_id,
+    affects_operational_status: row.affects_operational_status,
     category: row.category,
     title: row.title,
     description: row.description,
     priority: row.priority as WorkOrderPriority,
     status: row.status as WorkOrderStatus,
-    service_team: row.service_team as "TECHNICIAN" | "HOUSEKEEPING",
+    service_team: row.service_team as WorkOrderServiceTeam,
     assigned_to: row.assigned_to,
     requested_at: row.requested_at,
     scheduled_at: row.scheduled_at,
@@ -216,7 +222,7 @@ function mapToWorkOrder(row: WorkOrderDbRow): WorkOrder {
       updated_at: "",
     } : null,
 
-    resident_assignment: mappedResidentAssignment,
+    resident_assignment: mappedResidentAssignment as unknown as import("@/features/resident-assignment/types/resident-assignment.types").ResidentAssignment | null,
 
     assignee: row.assignees ? {
       id: row.assignees.id,
@@ -368,6 +374,9 @@ export async function create(dto: CreateWorkOrderDto): Promise<WorkOrder> {
     unit_id: dto.unit_id,
     resident_assignment_id: dto.resident_assignment_id || null,
     reservation_id: dto.reservation_id || null,
+    stay_id: dto.stay_id || null,
+    occupancy_id: dto.occupancy_id || null,
+    affects_operational_status: dto.affects_operational_status || false,
     category: dto.category,
     title: dto.title,
     description: dto.description || null,
@@ -399,6 +408,10 @@ export async function update(id: string, dto: UpdateWorkOrderDto): Promise<WorkO
   if (dto.category !== undefined) payload.category = dto.category;
   if (dto.title !== undefined) payload.title = dto.title;
   if (dto.description !== undefined) payload.description = dto.description;
+  if (dto.reservation_id !== undefined) payload.reservation_id = dto.reservation_id;
+  if (dto.stay_id !== undefined) payload.stay_id = dto.stay_id;
+  if (dto.occupancy_id !== undefined) payload.occupancy_id = dto.occupancy_id;
+  if (dto.affects_operational_status !== undefined) payload.affects_operational_status = dto.affects_operational_status;
   if (dto.priority !== undefined) payload.priority = dto.priority;
   if (dto.status !== undefined) payload.status = dto.status;
   if (dto.service_team !== undefined) payload.service_team = dto.service_team;

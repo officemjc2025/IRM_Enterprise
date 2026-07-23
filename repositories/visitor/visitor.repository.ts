@@ -91,7 +91,7 @@ interface UnitWithProperties extends Unit {
 
 function mapToVisitor(row: VisitorDbRow): Visitor {
   // Map nested objects to match expected TypeScript types in UI
-  let mappedResidentAssignment = null;
+  let mappedResidentAssignment: Record<string, unknown> | null = null;
   
   if (row.resident_assignments) {
     const ra = row.resident_assignments;
@@ -159,7 +159,7 @@ function mapToVisitor(row: VisitorDbRow): Visitor {
     actual_checkout_time: row.actual_checkout_time,
     company: row.company,
     security_user: row.security_user,
-    resident_assignment: mappedResidentAssignment,
+    resident_assignment: mappedResidentAssignment as unknown as import("@/features/resident-assignment/types/resident-assignment.types").ResidentAssignment | null,
   };
 }
 

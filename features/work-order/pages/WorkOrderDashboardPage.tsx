@@ -62,7 +62,7 @@ function WorkOrderDashboardInner() {
   const [assigneeId, setAssigneeId] = useState("");
   const [priorityVal, setPriorityVal] = useState<WorkOrderPriority>("NORMAL");
   const [scheduledAtVal, setScheduledAtVal] = useState("");
-  const [serviceTeamVal, setServiceTeamVal] = useState<"TECHNICIAN" | "HOUSEKEEPING">("TECHNICIAN");
+  const [serviceTeamVal, setServiceTeamVal] = useState<"TECHNICIAN" | "HOUSEKEEPING" | "INSPECTION_TEAM" | "SUPERVISOR">("TECHNICIAN");
 
   const [workPerformed, setWorkPerformed] = useState("");
   const [additionalWork, setAdditionalWork] = useState("");
@@ -97,14 +97,14 @@ function WorkOrderDashboardInner() {
   const [newDescription, setNewDescription] = useState("");
   const [newPropertyId, setNewPropertyId] = useState("");
   const [newUnitId, setNewUnitId] = useState("");
-  const [newServiceTeam, setNewServiceTeam] = useState<"TECHNICIAN" | "HOUSEKEEPING">("TECHNICIAN");
+  const [newServiceTeam, setNewServiceTeam] = useState<"TECHNICIAN" | "HOUSEKEEPING" | "INSPECTION_TEAM" | "SUPERVISOR">("TECHNICIAN");
   const [newScheduledAt, setNewScheduledAt] = useState("");
   const [newAssigneeId, setNewAssigneeId] = useState("");
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState("");
 
   const editAssigneeOptions = React.useMemo(() => {
-    const list = serviceTeamVal === "HOUSEKEEPING" ? housekeepers : technicians;
+    const list = (serviceTeamVal === "HOUSEKEEPING" || serviceTeamVal === "INSPECTION_TEAM" || serviceTeamVal === "SUPERVISOR") ? housekeepers : technicians;
     return list.map(w => ({
       value: w.id,
       label: w.display_name || w.full_name || w.email,
@@ -113,7 +113,7 @@ function WorkOrderDashboardInner() {
   }, [serviceTeamVal, housekeepers, technicians]);
 
   const newAssigneeOptions = React.useMemo(() => {
-    const list = newServiceTeam === "HOUSEKEEPING" ? housekeepers : technicians;
+    const list = (newServiceTeam === "HOUSEKEEPING" || newServiceTeam === "INSPECTION_TEAM" || newServiceTeam === "SUPERVISOR") ? housekeepers : technicians;
     return list.map(w => ({
       value: w.id,
       label: w.display_name || w.full_name || w.email,
@@ -1040,7 +1040,7 @@ function WorkOrderDashboardInner() {
                   <select
                     value={serviceTeamVal}
                     onChange={(e) => {
-                      const nextTeam = e.target.value as "TECHNICIAN" | "HOUSEKEEPING";
+                      const nextTeam = e.target.value as "TECHNICIAN" | "HOUSEKEEPING" | "INSPECTION_TEAM" | "SUPERVISOR";
                       setServiceTeamVal(nextTeam);
                       setAssigneeId("");
                     }}
@@ -1048,6 +1048,8 @@ function WorkOrderDashboardInner() {
                   >
                     <option value="TECHNICIAN">{language === "en" ? "TECHNICIAN" : "งานช่าง"}</option>
                     <option value="HOUSEKEEPING">{language === "en" ? "HOUSEKEEPING" : "งานแม่บ้าน"}</option>
+                    <option value="INSPECTION_TEAM">{language === "en" ? "INSPECTION TEAM" : "ทีมตรวจห้อง"}</option>
+                    <option value="SUPERVISOR">{language === "en" ? "SUPERVISOR" : "หัวหน้างาน"}</option>
                   </select>
                 </div>
 
@@ -1348,7 +1350,7 @@ function WorkOrderDashboardInner() {
                   <select
                     value={newServiceTeam}
                     onChange={(e) => {
-                      const team = e.target.value as "TECHNICIAN" | "HOUSEKEEPING";
+                      const team = e.target.value as "TECHNICIAN" | "HOUSEKEEPING" | "INSPECTION_TEAM" | "SUPERVISOR";
                       setNewServiceTeam(team);
                       setNewAssigneeId("");
                     }}
@@ -1356,6 +1358,8 @@ function WorkOrderDashboardInner() {
                   >
                     <option value="TECHNICIAN">{language === "en" ? "Technician" : "งานช่าง"}</option>
                     <option value="HOUSEKEEPING">{language === "en" ? "Housekeeping" : "งานแม่บ้าน"}</option>
+                    <option value="INSPECTION_TEAM">{language === "en" ? "Inspection Team" : "ทีมตรวจห้อง"}</option>
+                    <option value="SUPERVISOR">{language === "en" ? "Supervisor" : "หัวหน้างาน"}</option>
                   </select>
                 </div>
 

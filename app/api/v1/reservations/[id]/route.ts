@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { workflowService, WorkflowEvent } from "@/services/workflow/workflow.service";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -33,7 +34,7 @@ export async function GET(request: Request, { params }: Params) {
         property:property_id (id, property_name_th, property_name_en),
         unit:unit_id (id, unit_number),
         primary_guest:primary_guest_person_id (id, first_name, last_name, display_name),
-        work_orders:work_orders (*),
+        work_orders:work_orders!work_orders_stay_id_fkey (*),
         stay_charge_periods:stay_charge_periods (*)
       `)
       .eq("id", resId)
@@ -230,7 +231,7 @@ export async function PATCH(request: Request, { params }: Params) {
           property:property_id (id, property_name_th, property_name_en),
           unit:unit_id (id, unit_number),
           primary_guest:primary_guest_person_id (id, first_name, last_name, display_name),
-          work_orders:work_orders (*),
+          work_orders:work_orders!work_orders_stay_id_fkey (*),
           stay_charge_periods:stay_charge_periods (*)
         `)
         .eq("id", resId)
@@ -256,12 +257,21 @@ export async function PATCH(request: Request, { params }: Params) {
           property:property_id (id, property_name_th, property_name_en),
           unit:unit_id (id, unit_number),
           primary_guest:primary_guest_person_id (id, first_name, last_name, display_name),
-          work_orders:work_orders (*),
+          work_orders:work_orders!work_orders_stay_id_fkey (*),
           stay_charge_periods:stay_charge_periods (*)
         `)
         .eq("id", resId)
         .single();
       if (fetchErr) throw fetchErr;
+
+      // Trigger Checkout Workflow Event
+      await workflowService.handleEvent(WorkflowEvent.CHECK_OUT, {
+        unitId: updated.unit_id,
+        propertyId: updated.property_id,
+        actorId: user.id,
+        stayId: updated.id,
+        occupancyId: null, // this was a reservation stay, not an active owner/tenant resident assignment occupancy
+      });
 
       return NextResponse.json({ success: true, data: updated });
     }
@@ -275,7 +285,7 @@ export async function PATCH(request: Request, { params }: Params) {
         property:property_id (id, property_name_th, property_name_en),
         unit:unit_id (id, unit_number),
         primary_guest:primary_guest_person_id (id, first_name, last_name, display_name),
-        work_orders:work_orders (*),
+        work_orders:work_orders!work_orders_stay_id_fkey (*),
         stay_charge_periods:stay_charge_periods (*)
       `)
       .single();

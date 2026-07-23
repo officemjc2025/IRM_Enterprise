@@ -272,7 +272,7 @@ function StaysContent() {
     let waterIncompleteCount = 0;
     let electricityIncompleteCount = 0;
     const pendingExt = selectedStay.extensions?.find(ext => ext.status === "PENDING_APPROVAL") || null;
-    const attentionList = [];
+    const attentionList: string[] = [];
 
     const periodsToScan = periods || [];
     periodsToScan.forEach(p => {

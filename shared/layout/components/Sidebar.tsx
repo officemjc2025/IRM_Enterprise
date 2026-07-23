@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useContext } from "react";
+import { usePathname } from "next/navigation";
 import Logo from "@/components/common/Logo";
 import APP_CONFIG from "@/lib/config/app";
 import {
@@ -22,6 +23,7 @@ interface SidebarProps {
 
 export function Sidebar({ onClose, collapsed, setCollapsed }: SidebarProps) {
   const { t, language } = useLanguage();
+  const pathname = usePathname();
   const auth = useContext(AuthContext);
   const userRole = auth?.profile?.role;
 
@@ -45,10 +47,14 @@ export function Sidebar({ onClose, collapsed, setCollapsed }: SidebarProps) {
     if (isSecurity) {
       return [
         {
-          section: t.menu.business,
+          section: "พื้นที่ทำงานฝ่ายรักษาความปลอดภัย",
           items: [
-            { id: "security-dashboard", label: t.menu.security, href: "/security", icon: IconVisitors },
-            { id: "visitors", label: t.menu.visitors, href: "/visitors", icon: IconVisitors },
+            { id: "my-jobs", label: "งานของฉัน", href: "/security", icon: IconDashboard },
+            { id: "calendar", label: "ปฏิทินงาน", href: "/security/calendar", icon: IconDashboard },
+            { id: "all-jobs", label: "รายการงานทั้งหมด", href: "/security/jobs", icon: IconDashboard },
+            { id: "history", label: "ประวัติงาน", href: "/security/history", icon: IconDashboard },
+            { id: "supplies", label: "เบิกอุปกรณ์", href: "/security/supplies", icon: IconDashboard },
+            { id: "profile", label: "โปรไฟล์", href: "/security/profile", icon: IconDashboard },
           ]
         }
       ];
@@ -57,10 +63,14 @@ export function Sidebar({ onClose, collapsed, setCollapsed }: SidebarProps) {
     if (isTech) {
       return [
         {
-          section: t.menu.business,
+          section: "พื้นที่ทำงานช่างเทคนิค",
           items: [
-            { id: "work-orders", label: t.menu.workOrders, href: "/work-orders", icon: IconDashboard },
-            { id: "operations-calendar", label: language === "en" ? "Operational Calendar" : "ปฏิทินงาน", href: "/operations/calendar", icon: IconDashboard },
+            { id: "my-jobs", label: "งานของฉัน", href: "/technician", icon: IconDashboard },
+            { id: "calendar", label: "ปฏิทินงาน", href: "/technician/calendar", icon: IconDashboard },
+            { id: "all-jobs", label: "รายการงานทั้งหมด", href: "/technician/jobs", icon: IconDashboard },
+            { id: "history", label: "ประวัติงาน", href: "/technician/history", icon: IconDashboard },
+            { id: "supplies", label: "เบิกอุปกรณ์", href: "/technician/supplies", icon: IconDashboard },
+            { id: "profile", label: "โปรไฟล์", href: "/technician/profile", icon: IconDashboard },
           ]
         }
       ];
@@ -69,10 +79,14 @@ export function Sidebar({ onClose, collapsed, setCollapsed }: SidebarProps) {
     if (userRole === "housekeeping") {
       return [
         {
-          section: language === "en" ? "Housekeeping Workspace" : "พื้นที่ทำงานแม่บ้าน",
+          section: "พื้นที่ทำงานแม่บ้าน",
           items: [
-            { id: "housekeeping-jobs", label: language === "en" ? "My Jobs" : "งานของฉัน", href: "/housekeeping", icon: IconDashboard },
-            { id: "operations-calendar", label: language === "en" ? "Operational Calendar" : "ปฏิทินงาน", href: "/operations/calendar", icon: IconDashboard },
+            { id: "my-jobs", label: "งานของฉัน", href: "/housekeeping", icon: IconDashboard },
+            { id: "calendar", label: "ปฏิทินงาน", href: "/housekeeping/calendar", icon: IconDashboard },
+            { id: "all-jobs", label: "รายการงานทั้งหมด", href: "/housekeeping/jobs", icon: IconDashboard },
+            { id: "history", label: "ประวัติงาน", href: "/housekeeping/history", icon: IconDashboard },
+            { id: "supplies", label: "เบิกอุปกรณ์", href: "/housekeeping/supplies", icon: IconDashboard },
+            { id: "profile", label: "โปรไฟล์", href: "/housekeeping/profile", icon: IconDashboard },
           ]
         }
       ];
@@ -102,14 +116,33 @@ export function Sidebar({ onClose, collapsed, setCollapsed }: SidebarProps) {
         items: [
           { id: "visitors", label: t.menu.visitors, href: "/visitors", icon: IconVisitors },
           { id: "reservations", label: language === "en" ? "Room Reservations" : "การจองห้องพัก", href: "/reservations", icon: IconRental },
-          { id: "stays", label: language === "en" ? "Stay Tracking" : "ติดตามการเข้าพัก", href: "/stays", icon: IconRental },
+          { id: "registration-requests", label: language === "en" ? "Registration Requests" : "คำขอลงทะเบียน", href: "/registration-requests", icon: IconResidents },
+          { id: "announcements", label: language === "en" ? "Announcements" : "สื่อสารกับนิติ", href: "/announcements", icon: IconDashboard },
           { id: "service-bookings", label: language === "en" ? "Service Bookings" : "การจองบริการ", href: "/service-bookings", icon: IconRental },
+          { id: "stays", label: language === "en" ? "Stay Tracking" : "ติดตามการเข้าพัก", href: "/stays", icon: IconRental },
           { id: "operations-calendar", label: language === "en" ? "Operational Calendar" : "ปฏิทินงาน", href: "/operations/calendar", icon: IconDashboard },
           { id: "workorder-placeholder", label: t.menu.workOrders, href: "/work-orders", icon: IconDashboard },
           { id: "residents-placeholder", label: t.menu.residents, href: "/residents", icon: IconResidents },
           { id: "security-placeholder", label: t.menu.security, href: "/security", icon: IconVisitors },
           { id: "reports-placeholder", label: t.menu.reports, href: "/reports", icon: IconDashboard },
-        ]
+        ].filter((item) => {
+          if (item.id === "registration-requests") {
+            return ["super_admin", "admin", "property_admin"].includes(userRole || "");
+          }
+          return true;
+        })
+      },
+      {
+        section: language === "en" ? "Administration" : "การบริหารจัดการ",
+        items: [
+          { id: "staff-management", label: language === "en" ? "Staff List" : "รายชื่อเจ้าหน้าที่", href: "/staff-management", icon: IconResidents },
+          { id: "staff-import", label: language === "en" ? "Import Staff" : "นำเข้าเจ้าหน้าที่", href: "/staff-management/import", icon: IconDashboard },
+        ].filter((item) => {
+          if (item.id === "staff-management" || item.id === "staff-import") {
+            return ["super_admin", "admin", "property_admin"].includes(userRole || "");
+          }
+          return true;
+        })
       },
       {
         section: t.menu.system,
@@ -159,14 +192,22 @@ export function Sidebar({ onClose, collapsed, setCollapsed }: SidebarProps) {
             <ul className="space-y-1">
               {section.items.map((item) => {
                 const Icon = item.icon;
+                const isWorkspaceRoute = item.href.startsWith("/housekeeping") || item.href.startsWith("/technician") || item.href.startsWith("/security") || item.href.startsWith("/office");
+                const isActive = isWorkspaceRoute 
+                  ? pathname === item.href 
+                  : pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
                 return (
                   <li key={item.id}>
                     <a
                       href={item.href}
                       onClick={onClose}
                       title={collapsed ? item.label : undefined}
-                      className={`group flex items-center rounded-xl px-4 py-2.5 text-slate-300 transition-all duration-200 hover:bg-[#1E3A8A] hover:text-white text-sm ${
+                      className={`group flex items-center rounded-xl px-4 py-2.5 transition-all duration-200 text-sm ${
                         collapsed ? "justify-center" : "gap-3"
+                      } ${
+                        isActive
+                          ? "bg-[#D4AF37]/10 text-[#D4AF37] border border-[#D4AF37]/20 font-semibold"
+                          : "text-slate-300 hover:bg-[#1E3A8A] hover:text-white"
                       }`}
                     >
                       <Icon className="h-4 w-4 flex-shrink-0" />

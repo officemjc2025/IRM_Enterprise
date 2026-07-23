@@ -6,6 +6,7 @@ import { ownerSchema } from "./owner.schema";
 import { occupancySchema } from "./occupancy.schema";
 import { ownerRelationshipSchema } from "./owner_relationship.schema";
 import { combinedMetroSchema } from "./combined_metro.schema";
+import { staffSchema } from "./staff.schema";
 
 export const schemas: Record<string, ImportSchema> = {
   property: propertySchema,
@@ -15,6 +16,7 @@ export const schemas: Record<string, ImportSchema> = {
   occupancy: occupancySchema,
   owner_relationship: ownerRelationshipSchema,
   combined_metro: combinedMetroSchema,
+  staff: staffSchema,
 };
 
 export function getSchema(moduleName: string): ImportSchema {
@@ -32,3 +34,4 @@ export * from "./owner.schema";
 export * from "./occupancy.schema";
 export * from "./owner_relationship.schema";
 export * from "./combined_metro.schema";
+export * from "./staff.schema";

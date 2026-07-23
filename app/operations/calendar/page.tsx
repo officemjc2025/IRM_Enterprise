@@ -131,7 +131,7 @@ function CalendarContent() {
   const [assigneeId, setAssigneeId] = useState("");
   const [priorityVal, setPriorityVal] = useState<WorkOrderPriority>("NORMAL");
   const [scheduledAtVal, setScheduledAtVal] = useState("");
-  const [serviceTeamVal, setServiceTeamVal] = useState<"TECHNICIAN" | "HOUSEKEEPING">("TECHNICIAN");
+  const [serviceTeamVal, setServiceTeamVal] = useState<"TECHNICIAN" | "HOUSEKEEPING" | "INSPECTION_TEAM" | "SUPERVISOR">("TECHNICIAN");
   const [chargeAmountVal, setChargeAmountVal] = useState("");
   const [actualCostVal, setActualCostVal] = useState("");
   const [adminReviewRemark, setAdminReviewRemark] = useState("");
@@ -997,11 +997,13 @@ function CalendarContent() {
                     <label className="text-[10px] font-bold text-slate-500 uppercase">{language === "en" ? "Service Team" : "ประเภทงาน"}</label>
                     <select
                       value={serviceTeamVal}
-                      onChange={(e) => setServiceTeamVal(e.target.value as "TECHNICIAN" | "HOUSEKEEPING")}
+                      onChange={(e) => setServiceTeamVal(e.target.value as "TECHNICIAN" | "HOUSEKEEPING" | "INSPECTION_TEAM" | "SUPERVISOR")}
                       className="p-1.5 border border-slate-200 dark:border-slate-700 rounded dark:bg-slate-900 text-xs outline-none"
                     >
                       <option value="TECHNICIAN">TECHNICIAN</option>
                       <option value="HOUSEKEEPING">HOUSEKEEPING</option>
+                      <option value="INSPECTION_TEAM">INSPECTION TEAM</option>
+                      <option value="SUPERVISOR">SUPERVISOR</option>
                     </select>
                   </div>
                 </div>

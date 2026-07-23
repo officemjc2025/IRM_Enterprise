@@ -5,6 +5,8 @@ import { Status } from "@/shared/enums/status";
 import { Person } from "@/features/person/types/person.types";
 import { Unit } from "@/features/unit/types/unit.types";
 
+import { AuthorizationScope } from "@/lib/auth/scope";
+
 async function getSupabase() {
   if (typeof window === "undefined") {
     return await createServerClient();
@@ -50,6 +52,46 @@ function mapToResidentAssignment(row: ResidentAssignmentDbRow): ResidentAssignme
       status: (row.unit.status || "ACTIVE").toUpperCase() as Status,
     } as Unit : null,
   };
+}
+
+export async function findByScope(scope: AuthorizationScope): Promise<ResidentAssignment[]> {
+  if (scope.isFullScope) {
+    return findAll();
+  }
+
+  if (!scope.personId || !scope.authorizedUnitIds || scope.authorizedUnitIds.length === 0) {
+    return [];
+  }
+
+  const today = new Date().toISOString().split("T")[0];
+  const supabase = await getSupabase();
+  const { data, error } = await supabase
+    .from("resident_assignments")
+    .select(`
+      *,
+      unit:unit_id (id, unit_number, building_code, floor, property_id, properties(*)),
+      person:person_id (id, first_name, last_name, display_name, person_code)
+    `)
+    .eq("person_id", scope.personId)
+    .in("unit_id", scope.authorizedUnitIds)
+    .eq("status", "ACTIVE")
+    .is("deleted_at", null)
+    .lte("move_in_date", today)
+    .or(`move_out_date.is.null,move_out_date.gte.${today}`);
+
+  if (error) {
+    console.error("Error finding resident assignments by scope:", error);
+    return [];
+  }
+
+  return (data as ResidentAssignmentDbRow[] || []).map(mapToResidentAssignment);
+}
+
+export async function findByUnitIdAndScope(unitId: string, scope: AuthorizationScope): Promise<ResidentAssignment[]> {
+  if (!scope.isUnitAuthorized(unitId)) {
+    return [];
+  }
+  return findByUnitId(unitId);
 }
 
 export async function findAll(): Promise<ResidentAssignment[]> {

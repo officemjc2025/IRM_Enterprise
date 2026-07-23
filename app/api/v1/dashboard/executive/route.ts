@@ -16,11 +16,39 @@ export async function GET() {
     // Retrieve user profile to check role
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, account_status, is_active")
       .eq("id", user.id)
       .single();
 
-    const isAllowed = profile && ["admin", "super_admin", "property_admin", "manager"].includes(profile.role);
+    if (!profile) {
+      return NextResponse.json(
+        { success: false, message: "Unauthorized: Profile not found." },
+        { status: 401 }
+      );
+    }
+
+    if (!profile.is_active) {
+      return NextResponse.json(
+        { success: false, message: "Access Denied: Your account is inactive." },
+        { status: 403 }
+      );
+    }
+
+    if (!profile.account_status) {
+      return NextResponse.json(
+        { success: false, message: "Access Denied: Configuration Error." },
+        { status: 403 }
+      );
+    }
+
+    if (profile.account_status !== "ACTIVE") {
+      return NextResponse.json(
+        { success: false, message: `Access Denied: Your account status is ${profile.account_status}.` },
+        { status: 403 }
+      );
+    }
+
+    const isAllowed = ["admin", "super_admin", "property_admin", "manager"].includes(profile.role);
     if (!isAllowed) {
       return NextResponse.json(
         { success: false, message: "Forbidden - Insufficient permissions" },

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { residentAssignmentService } from "@/services/resident-assignment/resident-assignment.service";
+import { createClient } from "@/lib/supabase/server";
+import { getAuthorizedUnitScope } from "@/lib/auth/scope";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -8,72 +10,87 @@ interface Params {
 export async function GET(request: Request, { params }: Params) {
   try {
     const { id } = await params;
+    const supabase = await createClient();
+    const scope = await getAuthorizedUnitScope(supabase, undefined, request);
+
     const assignment = await residentAssignmentService.getAssignment(id);
     if (!assignment) {
-      return NextResponse.json(
-        { success: false, message: "Resident assignment not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, message: "Resident assignment not found" }, { status: 404 });
     }
+
+    if (!scope.isAssignmentAuthorized(id) && !scope.isUnitAuthorized(assignment.unit_id)) {
+      return NextResponse.json({ success: false, message: "Forbidden: You are not authorized to view this assignment." }, { status: 403 });
+    }
+
     return NextResponse.json({
       success: true,
       message: "Resident assignment retrieved successfully",
       data: assignment,
     });
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
     const message = error instanceof Error ? error.message : "Failed to retrieve resident assignment";
-    return NextResponse.json(
-      { success: false, message },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }
 
 export async function PATCH(request: Request, { params }: Params) {
   try {
     const { id } = await params;
+    const supabase = await createClient();
+    const scope = await getAuthorizedUnitScope(supabase, undefined, request);
+
+    if (!scope.isFullScope) {
+      return NextResponse.json({ success: false, message: "Forbidden: Admin privileges required to update resident assignments." }, { status: 403 });
+    }
+
     const body = await request.json();
     const assignment = await residentAssignmentService.updateAssignment(id, body);
     if (!assignment) {
-      return NextResponse.json(
-        { success: false, message: "Resident assignment not found or update failed" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, message: "Resident assignment not found or update failed" }, { status: 404 });
     }
+
     return NextResponse.json({
       success: true,
       message: "Resident assignment updated successfully",
       data: assignment,
     });
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
     const message = error instanceof Error ? error.message : "Failed to update resident assignment";
-    return NextResponse.json(
-      { success: false, message },
-      { status: 400 }
-    );
+    return NextResponse.json({ success: false, message }, { status: 400 });
   }
 }
 
 export async function DELETE(request: Request, { params }: Params) {
   try {
     const { id } = await params;
+    const supabase = await createClient();
+    const scope = await getAuthorizedUnitScope(supabase, undefined, request);
+
+    if (!scope.isFullScope) {
+      return NextResponse.json({ success: false, message: "Forbidden: Admin privileges required to archive resident assignments." }, { status: 403 });
+    }
+
     const success = await residentAssignmentService.archiveAssignment(id);
     if (!success) {
-      return NextResponse.json(
-        { success: false, message: "Resident assignment not found or archive failed" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, message: "Resident assignment not found or archive failed" }, { status: 404 });
     }
+
     return NextResponse.json({
       success: true,
       message: "Resident assignment archived successfully",
       data: null,
     });
   } catch (error: unknown) {
+    if (error instanceof Error && error.message === "UNAUTHENTICATED") {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+    }
     const message = error instanceof Error ? error.message : "Failed to archive resident assignment";
-    return NextResponse.json(
-      { success: false, message },
-      { status: 400 }
-    );
+    return NextResponse.json({ success: false, message }, { status: 400 });
   }
 }

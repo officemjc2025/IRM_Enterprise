@@ -2,14 +2,25 @@ import * as unitRepository from "@/repositories/unit/unit.repository";
 import { Unit, CreateUnitDto, UpdateUnitDto } from "@/features/unit/types/unit.types";
 import { UnitOperationalStatus, UNIT_OPERATIONAL_STATUSES } from "@/shared/enums/unit-operational-status";
 
+import { AuthorizationScope } from "@/lib/auth/scope";
+
 export const unitService = {
   async getUnits(): Promise<Unit[]> {
     return unitRepository.findAll();
   },
 
+  async getUnitsByScope(scope: AuthorizationScope): Promise<Unit[]> {
+    return unitRepository.findByScope(scope);
+  },
+
   async getUnit(id: string): Promise<Unit | null> {
     if (!id) throw new Error("Unit ID is required");
     return unitRepository.findById(id);
+  },
+
+  async getUnitByScope(id: string, scope: AuthorizationScope): Promise<Unit | null> {
+    if (!id) throw new Error("Unit ID is required");
+    return unitRepository.findByIdAndScope(id, scope);
   },
 
   async createUnit(dto: CreateUnitDto): Promise<Unit> {

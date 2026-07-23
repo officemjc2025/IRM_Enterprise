@@ -58,7 +58,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: false, message: "Failed to load units: " + unitsErr?.message }, { status: 500 });
     }
 
-    const unitByRoom = new Map(units.map((u) => [u.unit_number.trim(), u.id]));
+    const unitByRoom = new Map<string, string>((units as unknown as Array<{ unit_number: string; id: string }>).map((u) => [u.unit_number.trim(), u.id]));
 
     // 2. Load all existing active meters for invariant check
     const { data: existingActiveMeters, error: activeErr } = await supabase

@@ -1,8 +1,9 @@
 import { createClient } from "@/lib/supabase/client";
 import { Profile } from "@/types/profile";
+import { SupabaseClient } from "@supabase/supabase-js";
 
-export async function getProfile(id: string): Promise<Profile | null> {
-  const supabase = createClient();
+export async function getProfile(id: string, supabaseClient?: SupabaseClient): Promise<Profile | null> {
+  const supabase = supabaseClient || createClient();
 
   const { data, error } = await supabase
     .from("profiles")
@@ -28,8 +29,8 @@ export async function getProfile(id: string): Promise<Profile | null> {
   return data as Profile;
 }
 
-export async function updateProfile(id: string, updates: Partial<Profile>): Promise<Profile | null> {
-  const supabase = createClient();
+export async function updateProfile(id: string, updates: Partial<Profile>, supabaseClient?: SupabaseClient): Promise<Profile | null> {
+  const supabase = supabaseClient || createClient();
 
   const { data, error } = await supabase
     .from("profiles")
@@ -51,8 +52,8 @@ export async function updateProfile(id: string, updates: Partial<Profile>): Prom
   return data as Profile;
 }
 
-export async function createProfile(profile: Omit<Profile, "created_at" | "updated_at">): Promise<Profile | null> {
-  const supabase = createClient();
+export async function createProfile(profile: Omit<Profile, "created_at" | "updated_at">, supabaseClient?: SupabaseClient): Promise<Profile | null> {
+  const supabase = supabaseClient || createClient();
 
   const { data, error } = await supabase
     .from("profiles")
